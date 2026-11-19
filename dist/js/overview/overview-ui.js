@@ -4,13 +4,16 @@ window.App = window.App || {};
     'use strict';
 
     const Core = A.overviewCore;
-    const COLORS = ['#1c5744', '#71ab86', '#c0df73'];
+    const COLORS = ['#1c5744', '#63a37e', '#b8db68'];
+    const SHORT_NAMES = ['Тепло', 'Електрика', 'Газ'];
+    const RING_RADIUS = 50;
+    const RING_CIRC = 2 * Math.PI * RING_RADIUS;
+
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmt = (v, p = 1) => (typeof v === 'number' && Number.isFinite(v))
         ? new Intl.NumberFormat('uk-UA', { maximumFractionDigits: p }).format(v)
         : '—';
 
-    // Локальний стан фільтрів огляду
     const uiState = {
         year: '2025',
         cat: '',
@@ -18,6 +21,24 @@ window.App = window.App || {};
         page: 1,
         showInvalid: false
     };
+
+    // Розрахунок параметрів дуг для SVG-кільця
+    function calcRingArcs(shares) {
+        const activeCount = shares.filter(p => p > 0.2).length;
+        const gap = activeCount > 1 ? 3 : 0;
+        let offset = 0;
+
+        return shares.map(pct => {
+            const rawLen = (Math.max(0, pct) / 100) * RING_CIRC;
+            const dash = rawLen > gap ? rawLen - gap : rawLen;
+            const seg = {
+                dasharray: `${dash.toFixed(2)} ${RING_CIRC.toFixed(2)}`,
+                dashoffset: (-offset).toFixed(2)
+            };
+            offset += rawLen;
+            return seg;
+        });
+    }
 
     function renderOverviewPage($main) {
         const data = Core.getOverviewData(uiState.year);
@@ -49,22 +70,13 @@ window.App = window.App || {};
         }
 
         const biggest = groups[0]?.total || 1;
-        const shares = s.amounts.map(v => (s.total ? (v / s.total) * 100 : 0));
         const eligibleTotal = rows.filter(r => r.eligible).length;
         const excludedWithData = Math.max(0, s.covered - eligibleTotal);
-
-        let end = 0;
-        const gradient = shares.map((v, i) => {
-            const start = end;
-            end += v;
-            return `${COLORS[i]} ${start}% ${end}%`;
-        }).join(',');
+        const baseline = Core.getBaseline2025();
 
         const legendHtml = data.energyNames
             .map((v, i) => `<span class="key-label"><i class="swatch" style="background:${COLORS[i]}"></i>${esc(v)}</span>`)
             .join('');
-
-        const baseline = Core.getBaseline2025();
 
         $main.html(`
             <div class="page-head">
@@ -106,11 +118,12 @@ window.App = window.App || {};
 
             <!-- Інтерактивні діаграми -->
             <section class="dashboard overview-charts">
+                <!-- Ліва картка: споживання за категоріями -->
                 <article class="panel">
                     <div class="panel-head">
                         <div>
                             <h2>Споживання за категоріями</h2>
-                            <p>Натисніть на категорію, щоб відкрити її у рейтингу нижче</p>
+                            <p>Оберіть категорію для перегляду структури та рейтингу</p>
                         </div>
                         <span class="pill unit">МВт·год</span>
                     </div>
@@ -132,27 +145,70 @@ window.App = window.App || {};
                     <div class="legend chart-foot">${legendHtml}</div>
                 </article>
 
-                <article class="panel">
+                <!-- Права картка: смуга громади + збалансований блок обраної категорії -->
+                <article class="panel structure-panel">
                     <div class="panel-head">
                         <div>
                             <h2>Структура споживання</h2>
-                            <p>Баланс енергоносіїв по громаді</p>
+                            <p>Баланс енергоносіїв по громаді та категорії</p>
+                        </div>
+                        <span class="pill unit">${s.total ? `${fmt(s.total, 0)} МВт·год` : '—'}</span>
+                    </div>
+
+                    <!-- 1. Горизонтальна смуга по всій громаді -->
+                    <div class="comm-mix">
+                        <div class="comm-mix-head">
+                            <span class="mix-eyebrow">Уся громада · ${s.covered} будівель</span>
+                            ${s.costMln ? `<span class="cell-meta">≈ ${fmt(s.costMln, 1)} млн грн</span>` : ''}
+                        </div>
+                        <div class="stacked-strip" role="img" aria-label="Загальний баланс енергоносіїв по громаді">
+                            ${s.shares.map((pct, i) => pct > 0
+                                ? `<span class="strip-seg" style="width:${pct.toFixed(2)}%;background:${COLORS[i]}" title="${data.energyNames[i]}: ${fmt(pct, 1)}% (${fmt(s.amounts[i], 0)} МВт·год)"></span>`
+                                : ''
+                            ).join('')}
+                        </div>
+                        <div class="comm-mix-inline">
+                            ${SHORT_NAMES.map((name, i) => `
+                                <span class="mix-chip" title="${data.energyNames[i]}: ${s.counts[i] ? fmt(s.amounts[i], 0) + ' МВт·год' : 'немає даних'}">
+                                    <i class="swatch" style="background:${COLORS[i]}"></i>
+                                    <span>${name}</span>
+                                    <strong>${s.counts[i] ? fmt(s.shares[i], 1) + '%' : '—'}</strong>
+                                </span>
+                            `).join('')}
                         </div>
                     </div>
-                    <div class="share-body">
-                        <div class="ring" style="background:${s.total ? `conic-gradient(${gradient})` : '#eaf0eb'}">
-                            <div class="ring-hole"><b>${s.total ? '100%' : '—'}</b><small>разом</small></div>
+
+                    <!-- 2. Нижній блок з анімованим SVG-кругом для обраної категорії -->
+                    <div class="cat-drilldown" id="ov-cat-drilldown">
+                        <div class="drill-head">
+                            <div class="drill-top-row">
+                                <span class="drill-badge" id="ov-drill-meta">Обрана категорія</span>
+                                <span class="pill median-pill nowrap" id="ov-drill-cost" style="display:none"></span>
+                            </div>
+                            <h3 class="drill-title" id="ov-drill-title">—</h3>
                         </div>
-                        <div class="share-list">
-                            ${data.energyNames.map((name, i) => `
-                                <div class="share-item">
-                                    <div>
-                                        <span class="key-label"><i class="swatch" style="background:${COLORS[i]}"></i>${name}</span>
-                                        <small class="cell-meta">${s.counts[i] ? `${fmt(s.amounts[i], 0)} МВт·год` : 'Немає даних'}</small>
-                                    </div>
-                                    <strong>${s.counts[i] ? fmt(shares[i], 1) + '%' : '—'}</strong>
+
+                        <div class="drill-body">
+                            <div class="svg-donut-wrap">
+                                <svg class="svg-donut" viewBox="0 0 132 132" aria-hidden="true">
+                                    <circle class="donut-track" cx="66" cy="66" r="${RING_RADIUS}"></circle>
+                                    <circle class="donut-seg" id="ov-ring-0" cx="66" cy="66" r="${RING_RADIUS}" stroke="${COLORS[0]}" stroke-dasharray="0 ${RING_CIRC}" stroke-dashoffset="0"></circle>
+                                    <circle class="donut-seg" id="ov-ring-1" cx="66" cy="66" r="${RING_RADIUS}" stroke="${COLORS[1]}" stroke-dasharray="0 ${RING_CIRC}" stroke-dashoffset="0"></circle>
+                                    <circle class="donut-seg" id="ov-ring-2" cx="66" cy="66" r="${RING_RADIUS}" stroke="${COLORS[2]}" stroke-dasharray="0 ${RING_CIRC}" stroke-dashoffset="0"></circle>
+                                </svg>
+                                <div class="svg-donut-center" id="ov-ring-center">
+                                    <b id="ov-ring-total">—</b>
+                                    <span>МВт·год</span>
+                                    <small id="ov-ring-share">—</small>
                                 </div>
-                            `).join('')}
+                            </div>
+
+                            <div class="drill-list" id="ov-drill-list"></div>
+                        </div>
+
+                        <div class="drill-foot">
+                            <span class="cell-meta" id="ov-drill-toe"></span>
+                            <button type="button" class="link-jump" id="ov-jump-rank">До рейтингу ↓</button>
                         </div>
                     </div>
                 </article>
@@ -230,6 +286,62 @@ window.App = window.App || {};
                 </div>
             </details>
         `);
+
+        // Оновлення анімованого SVG-круга для обраної категорії
+        function updateCategoryDonut(animateEntrance = true) {
+            const g = groups.find(item => item.name === uiState.cat) || groups[0];
+            if (!g) return;
+
+            const $box = $('#ov-cat-drilldown');
+            if (animateEntrance) {
+                $box.removeClass('is-animating');
+                void $box[0]?.offsetWidth;
+                $box.addClass('is-animating');
+            }
+
+            const shareOfComm = s.total && g.total ? (g.total / s.total) * 100 : 0;
+
+            $('#ov-drill-meta').text(`${g.covered} із ${g.count} будівель зі споживанням`);
+            $('#ov-drill-title').text(g.name);
+
+            if (g.costMln) {
+                $('#ov-drill-cost').text(`≈ ${fmt(g.costMln, 1)} млн грн`).show();
+            } else {
+                $('#ov-drill-cost').hide();
+            }
+
+            $('#ov-ring-total').text(g.total !== null ? fmt(g.total, 0) : '0');
+            $('#ov-ring-share').text(s.total ? `${fmt(shareOfComm, 1)}% громади` : 'немає даних');
+
+            const catMedian = rows.find(r => r.category === g.name && r.median !== null)?.median;
+            const toeText = g.toe !== null ? `${fmt(g.toe, 1)} т н. е.` : 'немає даних';
+            const medText = catMedian ? ` · медіана ${fmt(catMedian, 1)} кВт·год/м²` : '';
+            $('#ov-drill-toe').text(toeText + medText);
+
+            const arcs = calcRingArcs(g.shares);
+            arcs.forEach((arc, i) => {
+                const el = document.getElementById(`ov-ring-${i}`);
+                if (el) {
+                    el.setAttribute('stroke-dasharray', arc.dasharray);
+                    el.setAttribute('stroke-dashoffset', arc.dashoffset);
+                }
+            });
+
+            // Просторі дворядкові плашки: відсотки гарантовано всередині блоку
+            $('#ov-drill-list').html(
+                SHORT_NAMES.map((name, i) => `
+                    <div class="drill-row">
+                        <div class="drill-row-top">
+                            <span class="key-label"><i class="swatch" style="background:${COLORS[i]}"></i>${esc(name)}</span>
+                            <strong class="drill-row-pct">${g.counts[i] ? fmt(g.shares[i], 1) + '%' : '—'}</strong>
+                        </div>
+                        <div class="drill-row-sub">
+                            <span>${g.counts[i] ? `${fmt(g.amounts[i], 0)} МВт·год` : 'Немає даних'}</span>
+                        </div>
+                    </div>
+                `).join('')
+            );
+        }
 
         // Малювання таблиці рейтингу
         function drawRank() {
@@ -324,16 +436,26 @@ window.App = window.App || {};
             });
         }
 
+        function selectCategory(catName) {
+            uiState.cat = catName;
+            uiState.page = 1;
+            $('#ov-category').val(catName);
+            $('#ov-cat-bars .bar-interactive').each(function () {
+                $(this).toggleClass('is-active', $(this).attr('data-pick-cat') === catName);
+            });
+            updateCategoryDonut(true);
+            drawRank();
+        }
+
+        updateCategoryDonut(false);
+        requestAnimationFrame(() => updateCategoryDonut(true));
         drawRank();
 
-        // Події сторінки
         $('#ov-cat-bars').on('click', '[data-pick-cat]', function () {
-            uiState.cat = $(this).attr('data-pick-cat');
-            uiState.page = 1;
-            $('#ov-category').val(uiState.cat);
-            $('#ov-cat-bars .bar-interactive').removeClass('is-active');
-            $(this).addClass('is-active');
-            drawRank();
+            selectCategory($(this).attr('data-pick-cat'));
+        });
+
+        $('#ov-jump-rank').on('click', () => {
             document.getElementById('ov-ranking')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
@@ -344,11 +466,7 @@ window.App = window.App || {};
         });
 
         $('#ov-category').on('change', function () {
-            uiState.cat = $(this).val();
-            uiState.page = 1;
-            $('#ov-cat-bars .bar-interactive').removeClass('is-active');
-            $(`#ov-cat-bars [data-pick-cat="${CSS.escape(uiState.cat)}"]`).addClass('is-active');
-            drawRank();
+            selectCategory($(this).val());
         });
 
         $('#ov-query').on('input', function () {

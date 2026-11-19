@@ -633,3 +633,309 @@
 /* Підсумковий рядок у зведенні 2025 */
 .row-total td { font-weight: 600; background: #f4f8f5; }
 details.panel > summary { display: flex; justify-content: space-between; align-items: center; }
+/* =========================================================
+   Огляд: права картка (смуга громади + збалансований SVG-круг)
+   ========================================================= */
+
+.structure-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* Прибираємо зайвий нижній відступ заголовка картки */
+.structure-panel .panel-head {
+    margin-bottom: 0;
+}
+
+/* Верхня горизонтальна смуга по всій громаді */
+.comm-mix {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding-top: 10px;
+    border-top: 1px solid #e6ede8;
+}
+
+.comm-mix-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.mix-eyebrow {
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5b6e63;
+}
+
+.stacked-strip {
+    display: flex;
+    width: 100%;
+    height: 12px;
+    background: #eaf0eb;
+    border-radius: 999px;
+    overflow: hidden;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid #dce5df;
+}
+
+.strip-seg {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1), filter 0.15s ease;
+}
+
+.strip-seg:hover {
+    filter: brightness(1.08);
+}
+
+.comm-mix-inline {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px 12px;
+}
+
+.mix-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+}
+
+.mix-chip strong {
+    color: #102a22;
+    font-weight: 600;
+}
+
+/* Нижній анімований блок обраної категорії */
+.cat-drilldown {
+    flex: 1;
+    background: linear-gradient(180deg, #f6faf7 0%, #eff5f1 100%);
+    border: 1px solid #d2e2d8;
+    border-radius: 14px;
+    padding: 15px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.cat-drilldown.is-animating .drill-list,
+.cat-drilldown.is-animating .svg-donut-center {
+    animation: ovDrillFade 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes ovDrillFade {
+    0% {
+        opacity: 0.35;
+        transform: translateY(4px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.drill-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.drill-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.drill-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #2f6b53;
+}
+
+/* Фіксована висота на 2 рядки — прибирає стрибання верстки при кліках */
+.drill-title {
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.28;
+    min-height: 2.56em;
+    color: #102a22;
+}
+
+.nowrap {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.drill-body {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+}
+
+/* Анімоване SVG-кільце (132×132) */
+.svg-donut-wrap {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    flex-shrink: 0;
+}
+
+.svg-donut {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    overflow: visible;
+}
+
+.donut-track {
+    fill: none;
+    stroke: #dfe8e2;
+    stroke-width: 15;
+}
+
+.donut-seg {
+    fill: none;
+    stroke-width: 15;
+    stroke-linecap: butt;
+    transition:
+        stroke-dasharray 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        stroke-dashoffset 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        stroke-width 0.2s ease;
+}
+
+.donut-seg:hover {
+    stroke-width: 18;
+}
+
+.svg-donut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.svg-donut-center b {
+    font-size: 1.18rem;
+    line-height: 1.1;
+    color: #102a22;
+}
+
+.svg-donut-center span {
+    font-size: 0.7rem;
+    color: #5b6e63;
+    margin-top: 1px;
+}
+
+.svg-donut-center small {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #1c5744;
+    background: #dfeee5;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-top: 4px;
+}
+
+/* Просторі дворядкові плашки ресурсів поруч із кругом */
+.drill-list {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.drill-row {
+    background: #ffffff;
+    border: 1px solid #e3ece6;
+    border-radius: 10px;
+    padding: 7px 11px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.drill-row-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.drill-row-top .key-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #1e293b;
+    white-space: nowrap;
+}
+
+.drill-row-pct {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #102a22;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.drill-row-sub {
+    margin-top: 2px;
+    padding-left: 16px;
+    font-size: 0.76rem;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+
+.drill-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed #cfe0d5;
+}
+
+.link-jump {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #123e32;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.link-jump:hover {
+    color: #1c5744;
+}
+
+@media (max-width: 640px) {
+    .drill-body {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .svg-donut-wrap {
+        margin: 0 auto;
+    }
+}

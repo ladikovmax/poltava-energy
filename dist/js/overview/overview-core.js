@@ -35,9 +35,12 @@ window.App = window.App || {};
 
         const hasAny = counts.some(c => c > 0);
         const total = hasAny ? amounts.reduce((a, b) => a + b, 0) : null;
+        const shares = amounts.map(v => (total && total > 0 ? (v / total) * 100 : 0));
+
         return {
             amounts,
             counts,
+            shares,
             covered,
             total,
             toe: total !== null ? total * 0.086 : null,
@@ -61,7 +64,6 @@ window.App = window.App || {};
         const gasFactor = (finite(gasKwh) && gasKwh > 0 ? gasKwh : 9.3) / 1000;
         const factors = [1.163, 0.001, gasFactor];
 
-        // Використовуємо базовий аналіз із passportCore для базового року або рахуємо для вибраного
         const baseAnalysis = A.passportCore.analyzeAll();
         const baseMap = new Map(baseAnalysis.items.map(x => [x.b.id, x]));
 
