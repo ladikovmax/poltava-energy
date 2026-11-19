@@ -1,9 +1,9 @@
 (function workspaceApp(){
 'use strict';
-const E=window.Energy, main=document.getElementById('main'), key='poltava-energy-v1', colors=['#1c5744','#71ab86','#c0df73'];
+const E=window.Energy, main=document.getElementById('main'), keys=window.EnergyStorage.keys, colors=['#1c5744','#71ab86','#c0df73'];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readStore(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
-let data=readStore(key)||structuredClone(window.DEMO), gas=Number(readStore('energy-gas-v1'))||E.gasDefault;
+let data=readStore(keys.workspace)||window.EnergyImport.empty(), gas=Number(readStore(keys.gas))||E.gasDefault;
 let year=data.periods['2025']?'2025':Object.keys(data.periods).sort().at(-1)||'2025',cat='',query='',page=1,showInvalid=false,passportId='',importMsg=[],timer;
 const fmt=(v,precision=1)=>E.finite(v)?new Intl.NumberFormat('uk-UA',{maximumFractionDigits:precision}).format(v):'—';
 const date=s=>s?/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-').reverse().join('.'):String(s):'—';
@@ -11,10 +11,10 @@ const displayYear=y=>data.periods[y]?.full?`${y} рік`:`${y} · до ${date(da
 const opt=(v,label,current)=>`<option value="${esc(v)}"${String(v)===String(current)?' selected':''}>${esc(label)}</option>`;
 const ico=(name)=>{const p={bolt:'m14 2-9 12h6l-1 8 9-13h-6l1-7Z',build:'M4 21h16M6 20V4h12v16M9 8h1m4 0h1m-6 4h1m4 0h1m-4 8v-4h3v4',report:'M5 3h11l3 3v15H5z M9 10h6m-6 4h6',chart:'M4 20h16M7 16v-5m5 5V5m5 11V8',upload:'M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5',download:'M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4',search:'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',leaf:'M3 17C2 8 8 4 21 3c-1 12-6 16-14 14m-3 3L16 8'};return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${p[name]||p.chart}"/></svg>`;};
 function notify(msg){const t=document.querySelector('#toast');t.textContent=msg;clearTimeout(timer);timer=setTimeout(()=>t.textContent='',4800);}
-function save(){try{localStorage.setItem(key,JSON.stringify(data));}catch{notify('Сховище браузера заповнене. Зміни доступні у відкритій вкладці.');}}
+function save(){try{localStorage.setItem(keys.workspace,JSON.stringify(data));}catch{notify('Сховище браузера заповнене. Зміни доступні у відкритій вкладці.');}}
 function download(name,text){const blob=new Blob([text],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function csv(name,rows){const cell=v=>`"${String(v??'').replaceAll('"','""')}"`;download(name,'\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n'));}
-function header(title,desc,action=''){return `<div class="page-head"><div><div class="eyeline"><i></i>${data.demo?'Демонстраційні дані · Полтава':'Полтавська міська громада'}</div><h1>${esc(title)}</h1>${desc?`<p class="subtitle">${esc(desc)}</p>`:''}</div><div class="actions no-print">${action}</div></div>`;}
+function header(title,desc,action=''){return `<div class="page-head"><div><div class="eyeline"><i></i>Полтавська міська громада</div><h1>${esc(title)}</h1>${desc?`<p class="subtitle">${esc(desc)}</p>`:''}</div><div class="actions no-print">${action}</div></div>`;}
 function stat(label,value,unit,note,icon){return `<article class="stat"><div class="stat-head">${esc(label)}<span class="stat-mark">${ico(icon)}</span></div><strong>${value}<span class="suffix">${esc(unit)}</span></strong><div class="stat-note">${esc(note)}</div></article>`;}
 function pane(title,sub,right=''){return `<div class="panel-head"><div><h2>${esc(title)}</h2>${sub?`<p>${esc(sub)}</p>`:''}</div>${right}</div>`;}
 const table=(headers,body)=>`<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
@@ -23,6 +23,11 @@ function grouped(rows,getKey){const g=new Map();for(const r of rows){const k=get
 function periodSelect(){return `<select id="year" aria-label="Звітний рік">${Object.keys(data.periods).sort().reverse().map(y=>opt(y,displayYear(y),year)).join('')}</select>`;}
 function methodology(){return `<details class="details panel method"><summary>Методика розрахунку</summary><p>Базовий рік — 2025. Тепло: Гкал × 1,163. Електроенергія: кВт·год ÷ 1000. Газ: м³ × ${fmt(gas,4)} кВт·год/м³ ÷ 1000. Тонни нафтового еквівалента: МВт·год × 0,086 за формою СЕнМ. Вода в м³ розглядається окремо.</p><p>Загальна сума включає наявні невід’ємні значення. Пропуски позначені тире. Покриття означає кількість будівель із принаймні одним енергетичним показником. Якщо бракує показника для наявного типу лічильника, питомі показники не обчислюються. Реєстр приладів відображає дату його вивантаження.</p><p>Рейтинг розраховується за повний рік, за опалюваною площею понад 1 м², у межах категорії. Клас — відношення кВт·год/м² будівлі до медіани групи з щонайменше 5 будівель: A ≤ 0,60; B ≤ 0,80; C ≤ 0,95; D ≤ 1,05; E ≤ 1,20; F ≤ 1,50; G &gt; 1,50. Це аналітична оцінка, а не енергетичний сертифікат.</p><p>Типове значення газу 9,7 кВт·год/м³ — приклад перерахунку за нижчою теплотою 34,92 МДж/м³ в одній із зон за другу декаду грудня 2025 року. Для розрахунку громади задайте погоджений показник у розділі «Імпорт». <a href="https://poltavagaz.com.ua/archives/23821" target="_blank" rel="noopener">Дані АТ «Полтавагаз»</a>.</p></details>`;}
 function overview(){
+ if(!data.buildings.length || !Object.keys(data.periods).length){
+   const hasRegistry=data.buildings.length>0;
+   main.innerHTML=header('Огляд енергоспоживання','')+`<section class="panel">${pane(hasRegistry?'Реєстр завантажено':'Даних ще немає',hasRegistry?'Додайте річний звіт про споживання, щоб побачити показники громади.':'Для першої перевірки завантажте реєстр будівель і звіт за 2025 рік.')}<a class="btn primary" href="#import">${ico('upload')}Перейти до імпорту</a></section>`;
+   return;
+ }
  const rows=E.analyze(data,year,gas),s=E.summary(rows),cats=grouped(rows,r=>r.b.category||''),full=!!data.periods[year]?.full;
  const groups=[...cats].map(([name,list])=>({name,...E.summary(list)})).sort((a,b)=>(b.total||0)-(a.total||0));
  if(!cats.has(cat))cat=groups.find(g=>E.category(g.name)==='Навчальні заклади')?.name||groups[0]?.name||'';
@@ -65,7 +70,24 @@ function passport(){
 }
 function importPage(){
  const ids=Object.keys(data.subjects||{}), builds=[...data.buildings].sort((a,b)=>a.name.localeCompare(b.name,'uk'));const options=(current)=>builds.map(b=>opt(b.id,b.name,current)).join('');
- main.innerHTML=header('Імпорт даних','Оберіть оригінальні звіти uMuni. Обробка й збереження відбуваються у вашому браузері.')+`<div class="columns"><section class="panel">${pane('Звіти громади','Реєстр будівель, річні звіти, лічильники та форма СЕнМ.')}<div class="file-zone">${ico('upload')}<label class="field">Файли Excel<input type="file" accept=".xlsx" multiple id="files"></label><div><button class="btn primary" id="importFiles">Опрацювати файли</button></div></div><div id="messages" role="status" class="import-result">${importMsg.map(m=>`<p>${esc(m)}</p>`).join('')}</div></section><section class="panel">${pane('Робочі дані',data.demo?'Відкрито знеособлений приклад за даними Полтави.':'Збережено на цьому пристрої.')}<dl class="facts"><div><dt>Будівлі</dt><dd>${builds.length}</dd></div><div><dt>Звітні роки</dt><dd>${esc(Object.keys(data.periods).join(', ')||'—')}</dd></div></dl><p class="footnote">Почніть із реєстру будівель та річного звіту. Файли можна обрати разом.</p></section></div>
+ main.innerHTML=header('Імпорт даних','Оригінальні файли Excel обробляються у вашому браузері.')+`<div class="columns import-columns">
+ <section class="panel import-guide"><h2>1. Завантажте файли з Google Диска</h2>
+ <p>Відкрийте папку <a href="https://drive.google.com/drive/search?q=Трек%202%20Енергетиний%20менеджмент" target="_blank" rel="noopener noreferrer">«Трек 2 Енергетиний менеджмент»</a> через пошук у вашому Google Диску. Завантажте файли у форматі XLSX. Якщо Диск створить ZIP, спершу розпакуйте його.</p>
+ <h3>Для першої перевірки — два файли</h3>
+ <ul><li><b>Buildings_Info_Report (1).xlsx</b><span>Реєстр будівель. Додайте при першому імпорті.</span></li>
+ <li><b>Річне_використання_ресурсів (49).xlsx</b><span>Повний 2025 рік. Дає базовий рівень і рейтинг.</span></li></ul>
+ <h3>Для повної перевірки додайте ще три</h3>
+ <ul><li><b>Річне_використання_ресурсів (50).xlsx</b><span>Споживання за 2026 рік станом на 11 листопада.</span></li>
+ <li><b>Лічильники (3).xlsx</b><span>Прилади обліку та їхній зв’язок із будівлями.</span></li>
+ <li><b>Інформація щодо впровадження СЕМ у Полтавській ТГ 13.07.2026.xlsx</b><span>Довідник суб’єктів СЕнМ для зведення за організаціями.</span></li></ul>
+ <p class="footnote">Документ ТЗ у форматі DOCX пропустіть. Для розділу «Відкриті дані» потрібен окремий журнал показань у CSV.</p></section>
+ <div class="import-tools"><section class="panel"><h2>2. Імпортуйте XLSX</h2><p class="muted">Оберіть два або всі п’ять завантажених файлів одночасно й натисніть «Опрацювати файли».</p>
+ <div class="file-zone">${ico('upload')}<label class="field">Файли Excel<input type="file" accept=".xlsx" multiple id="files"></label><div><button class="btn primary" id="importFiles">Опрацювати файли</button></div></div>
+ <div id="messages" role="status" class="import-result">${importMsg.map(m=>`<p>${esc(m)}</p>`).join('')}</div>
+ ${Object.keys(data.periods).length?'<a class="btn secondary extras" href="#overview">Переглянути огляд</a>':''}</section>
+ <section class="panel">${pane('Робочі дані','Збережено у цьому браузері.')}<dl class="facts"><div><dt>Будівлі</dt><dd>${builds.length}</dd></div><div><dt>Лічильники</dt><dd>${Object.keys(data.meterIndex||{}).length}</dd></div><div><dt>Звітні роки</dt><dd>${esc(Object.keys(data.periods).sort().join(', ')||'—')}</dd></div></dl>
+ <p class="footnote">Після імпорту всіх п’яти файлів із цієї папки очікуйте 311 будівель, 1 097 лічильників і два звітні роки.</p>
+ <button type="button" class="btn secondary extras" id="clear-data">Очистити дані сайту</button></section></div></div>
  <section class="panel section-gap">${pane('Якість даних','Пропуски, непридатна площа та розбіжності між лічильниками й споживанням.')}<button class="btn secondary" id="defects">${ico('download')}Завантажити data-defects.csv</button></section>
  <section class="panel">${pane('Зв’язки із суб’єктами СЕнМ',ids.length?`${ids.length} суб’єктів у довіднику. Підтвердьте зв’язок для зведення.`:'Завантажте файл D2-05, щоб прив’язати будівлю до суб’єкта.')} ${ids.length?`<div class="form-grid"><label class="field">Будівля<select id="linkBuilding">${options('')}</select></label><label class="field">Суб’єкт<select id="linkSubject"></select></label><button class="btn primary" id="saveLink">Зберегти зв’язок</button></div>`:''}</section>
  ${(data.pending||[]).length?`<section class="panel">${pane('Зіставлення будівель',`${data.pending.length} рядків потребують рішення.`)}<label class="field">Рядок звіту<select id="pendingRow">${data.pending.map((v,i)=>opt(i,`${v.year} · ${v.name} · ${v.address}`,'')).join('')}</select></label><div class="form-grid extras"><label class="field">Будівля реєстру<select id="pendingBuilding"><option value="">Оберіть будівлю</option>${options('')}</select></label><button id="resolve" class="btn primary">Підтвердити збіг</button></div></section>`:''}
@@ -85,7 +107,12 @@ function importPage(){
  const defectButton=document.querySelector('#defects');
  defectButton.insertAdjacentHTML('beforebegin','<details class="details"><summary>Переглянути зауваження ('+defects.length+')</summary>'+table(['Рік','Будівля','Правило'],defects.slice(0,8).map(d=>'<tr><td>'+esc(d[0])+'</td><td>'+esc(d[2])+'</td><td>'+esc(d[3])+'</td></tr>').join(''))+'<p class="footnote">Перші '+Math.min(defects.length,8)+' записів. Повний перелік доступний у CSV.</p></details>');
  defectButton.onclick=()=>csv('data-defects.csv',[['Рік','ID будівлі','Будівля','Поле / правило','Вихідне значення','Файл','Рядок у XLSX'],...defects]);
- document.querySelector('#saveGas').onclick=()=>{const el=document.querySelector('#gas'),v=el.valueAsNumber;if(!el.checkValidity()||!E.finite(v)||v<=0){el.reportValidity();return;}gas=v;try{localStorage.setItem('energy-gas-v1',String(v));}catch{}render();notify('Коефіцієнт оновлено');};
+ document.querySelector('#clear-data').onclick=()=>{
+   if(!window.confirm('Очистити імпортовані звіти, показання, довідники та налаштування у цьому браузері?'))return;
+   try{window.EnergyStorage.clear();}catch{notify('Сховище браузера недоступне. Оновіть сторінку, щоб завершити сеанс.');return;}
+   location.reload();
+ };
+ document.querySelector('#saveGas').onclick=()=>{const el=document.querySelector('#gas'),v=el.valueAsNumber;if(!el.checkValidity()||!E.finite(v)||v<=0){el.reportValidity();return;}gas=v;try{localStorage.setItem(keys.gas,String(v));}catch{}render();notify('Коефіцієнт оновлено');};
  if(ids.length){const b=document.querySelector('#linkBuilding'),s=document.querySelector('#linkSubject');const refresh=()=>s.innerHTML=opt('','Не визначений',data.links?.[b.value])+ids.map(id=>opt(id,`${data.subjects[id]} · ${id}`,data.links?.[b.value])).join('');refresh();b.onchange=refresh;document.querySelector('#saveLink').onclick=()=>{data.links[b.value]=s.value;save();notify('Зв’язок оновлено');};}
  const resolve=document.querySelector('#resolve');if(resolve)resolve.onclick=()=>{const id=document.querySelector('#pendingBuilding').value;if(!id){notify('Оберіть будівлю');return;}try{data=EnergyImport.resolve(data,+document.querySelector('#pendingRow').value,id);save();render();notify('Зіставлення збережене');}catch(err){notify(err.message);}};
 }

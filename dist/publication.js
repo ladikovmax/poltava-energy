@@ -5,7 +5,7 @@
   const names = ['ID запису','Дата зняття','Заклад','ЄДРПОУ закладу','Постачальник','ЄДРПОУ постачальника','ID лічильника','Послуга','Показання','Одиниця','Тарифна зона','Час зняття'];
   const title = Object.fromEntries([...fields,...extras].map((f,i)=>[f,names[i]]));
   const refFields = ['organizationName','organizationId','providerName','providerId'];
-  const storeKey = 'poltava-energy-publication-v1';
+  const storeKey = window.EnergyStorage.keys.publication;
   const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clean = v => /^(null|-|—)$/i.test(String(v ?? '').trim()) ? '' : String(v ?? '').trim();
   const validDate = s => /^\d{4}-\d\d-\d\d$/.test(s) && !Number.isNaN(Date.parse(s+'T00:00:00Z')) && new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;

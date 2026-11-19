@@ -230,5 +230,5 @@
     for (const doc of docs.filter(d=>d.type==="subjects")) subjects(state,doc,messages);
     return {state,messages};
   }
-  window.EnergyImport={readFiles,resolve};
+  window.EnergyImport={empty,readFiles,resolve};
 })();
