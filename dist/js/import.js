@@ -8,7 +8,7 @@
   const copy = value => JSON.parse(JSON.stringify(value));
   const empty = () => ({
     buildings: [], subjects: {}, links: {}, periods: {}, pending: [], aliases: {},
-    meterIndex: {}, demo: false
+    meterIndex: {}, meterResources: {}, meterDetails: {}, demo: false
   });
   const idString = value => {
     const key = tidy(value);
@@ -157,14 +157,17 @@
       const id=idString(get("id будівлі")), b=buildings.get(id);
       if (!b) {missing++;continue;}
       const resource=tidy(get("ресурс")) || "Ресурс не вказано";
+      const details={number:String(get("номер лічильника")??"").trim(),model:tidy(get("модель лічильника")),kind:tidy(get("тип"))};
       const existing=assignments.get(meter);
-      if (existing && (existing.id!==id || existing.resource!==resource)) throw Error(doc.fileName + ": суперечливі записи одного лічильника.");
+      if (existing && (existing.id!==id || existing.resource!==resource || JSON.stringify(existing.details)!==JSON.stringify(details))) throw Error(doc.fileName + ": суперечливі записи одного лічильника.");
       if (existing) continue;
-      assignments.set(meter,{id,resource});
+      assignments.set(meter,{id,resource,details});
       Object.defineProperty(b.meters,resource,{value:(Object.hasOwn(b.meters,resource) ? b.meters[resource]:0)+1,configurable:true,enumerable:true,writable:true});
     }
     if (!assignments.size) throw Error(doc.fileName + ": немає лічильників, зіставлених із реєстром.");
     state.meterIndex = Object.fromEntries([...assignments].map(([meter,{id}])=>[meter,id]));
+    state.meterResources = Object.fromEntries([...assignments].map(([meter,{resource}])=>[meter,resource]));
+    state.meterDetails = Object.fromEntries([...assignments].map(([meter,{details}])=>[meter,details]));
     messages.push("Лічильників: " + assignments.size + (missing ? ". Без відповідної будівлі: " + missing : "") + ".");
   }
   function subjects(state, doc, messages) {
@@ -230,5 +233,5 @@
     for (const doc of docs.filter(d=>d.type==="subjects")) subjects(state,doc,messages);
     return {state,messages};
   }
-  window.EnergyImport={readFiles,resolve};
+  window.EnergyImport={empty,readFiles,resolve};
 })();
