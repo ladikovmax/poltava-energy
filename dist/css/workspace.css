@@ -1086,3 +1086,509 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     color: #b45309;
     border: 1px solid #f59e0b;
 }
+
+/* Панель швидких фільтрів сортування */
+.sort-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin: 10px 0 14px;
+    padding: 8px 10px;
+    background: #f9fbfa;
+    border: 1px solid #e4ece7;
+    border-radius: 12px;
+}
+
+.sort-toolbar-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #5c7066;
+    padding-left: 2px;
+}
+
+.sort-pills {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.sort-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    border: 1px solid #dce6e0;
+    background: #ffffff;
+    color: #2f433a;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sort-pill:hover {
+    background: #f1f7f4;
+    border-color: #b7cfc1;
+    color: #163f31;
+}
+
+.sort-pill.is-active {
+    background: #1c5744;
+    border-color: #1c5744;
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(28, 87, 68, 0.22);
+}
+
+.sort-pill svg {
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+
+.sort-pill.is-active svg {
+    opacity: 1;
+}
+
+/* Колонка «Площа / Обсяг» у таблиці */
+.metric-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    white-space: nowrap;
+}
+
+.metric-main {
+    font-size: 0.86rem;
+    color: #1f332a;
+}
+
+.metric-highlight {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1c5744;
+}
+
+/* Оновлена нижня пагінація таблиці */
+.pager-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #e6ede9;
+}
+
+.pager-left,
+.pager-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+}
+
+.page-size-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: #f3f7f5;
+    border: 1px solid #e0e9e4;
+    border-radius: 999px;
+}
+
+.page-size-group > .cell-meta {
+    padding: 0 6px 0 8px;
+}
+
+.size-pill {
+    min-width: 30px;
+    height: 24px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #465b51;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.size-pill:hover {
+    background: #e4efe9;
+    color: #163f31;
+}
+
+.size-pill.is-active {
+    background: #1c5744;
+    color: #ffffff;
+}
+
+.btn-load-more {
+    padding: 6px 12px;
+    font-size: 0.81rem;
+    border-radius: 999px;
+    background: #eef6f1;
+    border-color: #bdd4c7;
+    color: #184c3b;
+}
+
+.btn-load-more:hover {
+    background: #e1efe7;
+}
+
+.pager-pages {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.page-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 9px;
+    border: 1px solid #dce6e0;
+    background: #ffffff;
+    color: #263b32;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: #f0f6f3;
+    border-color: #b4cdc0;
+    color: #163f31;
+}
+
+.page-btn.is-active {
+    background: #1c5744;
+    border-color: #1c5744;
+    color: #ffffff;
+}
+
+.page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.page-dots {
+    padding: 0 4px;
+    color: #798c83;
+    font-size: 0.85rem;
+    user-select: none;
+}
+
+.page-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 6px;
+    font-size: 0.78rem;
+    color: #5c7066;
+}
+
+.page-jump input {
+    width: 48px;
+    height: 32px;
+    padding: 0 6px;
+    text-align: center;
+    border-radius: 9px;
+    border: 1px solid #dce6e0;
+    background: #ffffff;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1f332a;
+}
+
+.page-jump input:focus {
+    outline: none;
+    border-color: #1c5744;
+    box-shadow: 0 0 0 2px rgba(28, 87, 68, 0.14);
+}
+
+/* =========================================================
+   Кастомні випадаючі списки (.ui-select) під дизайн системи
+   ========================================================= */
+select.ui-select-native {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+    pointer-events: none !important;
+}
+
+.ui-select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-width: 210px;
+    max-width: 100%;
+}
+
+.ui-select.wide-select {
+    display: flex;
+    width: min(100%, 620px);
+}
+
+.ui-select-trigger {
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #cfe0d6;
+    border-radius: 11px;
+    color: #143328;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 550;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(16, 42, 34, 0.04);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.ui-select-trigger:hover {
+    background: #f8fbf9;
+    border-color: #9fc2ae;
+}
+
+.ui-select-trigger:focus-visible,
+.ui-select.is-open .ui-select-trigger {
+    outline: none;
+    background: #ffffff;
+    border-color: #1c5744;
+    box-shadow: 0 0 0 3px rgba(28, 87, 68, 0.14);
+}
+
+.ui-select-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.ui-val-main {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ui-select-chevron {
+    flex-shrink: 0;
+    color: #3f6353;
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ui-select.is-open .ui-select-chevron {
+    transform: rotate(180deg);
+    color: #1c5744;
+}
+
+/* Випадаюча панель */
+.ui-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(620px, calc(100vw - 28px));
+    background: #ffffff;
+    border: 1px solid #cce0d4;
+    border-radius: 13px;
+    box-shadow: 0 12px 32px rgba(16, 42, 34, 0.14), 0 2px 6px rgba(16, 42, 34, 0.06);
+    padding: 6px;
+    z-index: 60;
+    animation: uiSelectDrop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ui-select.wide-select .ui-select-menu {
+    width: 100%;
+}
+
+.ui-select.align-right .ui-select-menu {
+    left: auto;
+    right: 0;
+}
+
+.ui-select.open-up .ui-select-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+
+@keyframes uiSelectDrop {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Пошук усередині довгих списків */
+.ui-select-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e6efe9;
+}
+
+.ui-select-search[hidden] {
+    display: none;
+}
+
+.ui-select-search svg {
+    position: absolute;
+    left: 10px;
+    color: #6b8075;
+    pointer-events: none;
+}
+
+.ui-select-search input {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px 0 32px;
+    border: 1px solid #d8e5de;
+    border-radius: 9px;
+    background: #f7faf8;
+    color: #143328;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.ui-select-search input:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #1c5744;
+    box-shadow: 0 0 0 2px rgba(28, 87, 68, 0.12);
+}
+
+/* Список опцій */
+.ui-select-options {
+    max-height: 290px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 2px;
+}
+
+.ui-select-options::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ui-select-options::-webkit-scrollbar-thumb {
+    background: #c7d9ce;
+    border-radius: 999px;
+}
+
+.ui-select-option {
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #1f362c;
+    font: inherit;
+    font-size: 0.875rem;
+    line-height: 1.32;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.ui-select-option:hover,
+.ui-select-option:focus-visible {
+    outline: none;
+    background: #f1f7f3;
+    color: #102a22;
+}
+
+.ui-select-option.is-selected {
+    background: #e7f2ec;
+    color: #123e32;
+    font-weight: 600;
+}
+
+.ui-opt-text {
+    min-width: 0;
+    flex: 1;
+}
+
+.ui-opt-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+}
+
+.ui-opt-check {
+    color: #1c5744;
+    flex-shrink: 0;
+}
+
+/* Бейджі статусів/класів у списку будівель */
+.ui-opt-tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ui-opt-tag.is-good {
+    background: #e3f3e8;
+    color: #166534;
+}
+
+.ui-opt-tag.is-mid {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.ui-opt-tag.is-bad {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ui-opt-tag.is-muted {
+    background: #f1f5f3;
+    color: #64748b;
+}
+
+.ui-select-empty {
+    padding: 14px 10px;
+    text-align: center;
+    font-size: 0.84rem;
+    color: #64748b;
+}
