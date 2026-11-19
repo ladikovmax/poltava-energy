@@ -8,7 +8,7 @@
   const copy = value => JSON.parse(JSON.stringify(value));
   const empty = () => ({
     buildings: [], subjects: {}, links: {}, periods: {}, pending: [], aliases: {},
-    meterIndex: {}, demo: false
+    meterIndex: {}, meterResources: {}, demo: false
   });
   const idString = value => {
     const key = tidy(value);
@@ -165,6 +165,7 @@
     }
     if (!assignments.size) throw Error(doc.fileName + ": немає лічильників, зіставлених із реєстром.");
     state.meterIndex = Object.fromEntries([...assignments].map(([meter,{id}])=>[meter,id]));
+    state.meterResources = Object.fromEntries([...assignments].map(([meter,{resource}])=>[meter,resource]));
     messages.push("Лічильників: " + assignments.size + (missing ? ". Без відповідної будівлі: " + missing : "") + ".");
   }
   function subjects(state, doc, messages) {

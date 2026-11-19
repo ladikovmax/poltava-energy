@@ -68,7 +68,7 @@
     const output=[],byId=new Map(),byKey=new Map(),meta=new Map();
     function index(r,i){if(!byKey.has(identity(r)))byKey.set(identity(r),[]);byKey.get(identity(r)).push(i);if(!byId.has(r.uid))byId.set(r.uid,[]);byId.get(r.uid).push(i);}
     function insert(r){output.push({...r});index(r,output.length-1);}
-    function replace(i,r){const prev=output[i];byKey.set(identity(prev),byKey.get(identity(prev)).filter(j=>j!==i));byId.set(prev.uid,byId.get(prev.uid).filter(j=>j!==i));output[i]={...r,uid:prev.uid,_key:prev._key};index(output[i],i);}
+    function replace(i,r){const prev=output[i];byKey.set(identity(prev),byKey.get(identity(prev)).filter(j=>j!==i));byId.set(prev.uid,byId.get(prev.uid).filter(j=>j!==i));output[i]={...r,uid:prev.uid,_key:prev._key,_editKey:r._key};index(output[i],i);}
     for(const r of s.base)insert(r);
     for(const r of s.base){const e=errors(r);if((byId.get(r.uid)||[]).length>1)e.push('Неунікальний ID запису');meta.set(r._key,{status:e.length?'error':'base',message:e.join(' · ')});}
     const seenJournal=new Set();
@@ -110,6 +110,16 @@
   function applyRegistry(r,state){
     if(!state||!clean(r.meterNumber))return;
     const buildingId=state.meterIndex?.[r.meterNumber], code=state.links?.[buildingId];
+    const resource=state.meterResources?.[r.meterNumber];
+    if(typeof resource==='string'&&resource!=='Ресурс не вказано'){
+      const type=resource.replace(/\s*\([^)]*\)\s*$/,'').trim();
+      if(!clean(r.type))r.type=type;
+      if(!clean(r.unitName)&&clean(r.type)===type){
+        if(/Гкал/i.test(resource))r.unitName='гігакалорія';
+        else if(/м[³3]|^Холодна вода$|^Газ$/i.test(resource))r.unitName='кубічний метр';
+        else if(resource==='Електроенергія')r.unitName='кіловат-година';
+      }
+    }
     if(buildingId===undefined||!code||!/^\d{8}$/.test(String(code)))return;
     const name=state.subjects?.[code];
     if(typeof name==='string')fillPair(r,'organizationId','organizationName',code,name);
@@ -124,7 +134,7 @@
   }
   function importData(s,source,kind,state){
     const {columns,records}=parseCsv(source);
-    const needed=kind==='base'?fields:['date','meterNumber','type','quantity','unitName'];
+    const needed=kind==='base'?fields:['date','meterNumber','quantity'];
     const absent=needed.filter(c=>!columns.includes(c));
     if(absent.length)throw Error('Бракує колонок: '+absent.join(', ')+'.');
     if(!records.length)throw Error('У файлі є заголовки, але немає записів.');
@@ -139,7 +149,7 @@
       if(kind==='journal'){
         for(const f of fields)r[f]=clean(r[f]);
         if(/^[-+]?\d+,\d+$/.test(r.quantity))r.quantity=r.quantity.replace(',','.');
-        applyRules(r,s.rules);applyRegistry(r,state);
+        applyRegistry(r,state);applyRules(r,s.rules);
       }
       s[kind].push(r);added++;
     });
@@ -147,10 +157,26 @@
   }
   const labels={error:'Виправити',conflict:'Збіг',skip:'Пропущено',same:'Без змін',base:'Опубліковано',changed:'Оновлено',new:'Додано'};
   const example={date:'2025-12-31',meterNumber:'DEMO-01',type:'Електроенергія',quantity:'125.4',unitName:'кіловат-година',organizationName:'Умовний заклад',organizationId:'00000001',providerName:'Умовний постачальник',providerId:'00000002',uid:'DEMO-reading-1'};
-  window.PublicationData={parseCsv,asCsv,plan,importData,applyRules,applyRegistry,errors};
+  function importJournal(source,state){
+    const s=load();
+    const next={...s,journal:[...s.journal]};
+    const added=importData(next,source,'journal',state);
+    localStorage.setItem(storeKey,JSON.stringify(next));
+    memory=next;
+    return added;
+  }
+  window.PublicationData={parseCsv,asCsv,plan,importData,importJournal,applyRules,applyRegistry,errors};
   window.renderPublication=(host,state,helpers)=>{
     const s=load();
-    for(const r of s.journal)applyRegistry(r,state);
+    for(const r of s.journal){applyRegistry(r,state);applyRules(r,s.rules);}
+    const buildings=new Map(state.buildings.map(b=>[String(b.id),b]));
+    const catalog=Object.entries(state.meterIndex||{}).map(([meterNumber,id])=>{
+      const row=Object.fromEntries(fields.map(f=>[f,'']));
+      row.meterNumber=meterNumber;
+      applyRegistry(row,state);
+      return {...row,buildingName:buildings.get(String(id))?.name||''};
+    }).sort((a,b)=>a.buildingName.localeCompare(b.buildingName,'uk')||a.meterNumber.localeCompare(b.meterNumber,'uk',{numeric:true}));
+    let view=plan(s).output.length?'result':'meters',viewPage=0,query='',draft=null;
     let page=0,filter='needed',active='',review=false,stream='journal',feedback='';
     const save=msg=>{feedback=msg;try{localStorage.setItem(storeKey,JSON.stringify(s));}catch{feedback+=' Зміни збережено лише у цій вкладці: локальне сховище недоступне.';}};
     const btn=(id,label,attr='')=>'<button type="button" id="pub-'+id+'" '+attr+'>'+label+'</button>';
@@ -159,15 +185,18 @@
     const click=(id,fn)=>{const b=el(id);if(b)b.onclick=fn;};
     const fileBtn=(kind,name)=>'<label class="pb-file"><span>'+name+'</span><input type="file" aria-label="'+name+'" id="pub-'+kind+'" accept=".csv,text/csv"></label>';
     const section=(heading,html)=>'<section class="pb-box"><h3>'+heading+'</h3>'+html+'</section>';
-    function editor(r,m){
+    function editor(r,m,kind=stream){
       const opts=(m?.options||[]).map(o=>'<option value="'+esc(o._key)+'">'+esc([o.uid,o.date,o.type,o.tariff,o.quantity,o.unitName].filter(Boolean).join(' · '))+'</option>').join('');
-      const form=(stream==='base'?fields:[...fields,...extras]).map(f=>field('f-'+f,title[f],f==='date'?'date':'text',r[f])).join('');
-      const buildingId=stream==='journal'?state?.meterIndex?.[r.meterNumber]:undefined;
+      const input=f=>field('f-'+f,title[f],f==='date'?'date':'text',r[f]);
+      const form=kind==='base'?fields.map(input).join(''):
+        ['date','quantity','unitName','meterNumber','type',...refFields].map(input).join('')+
+        '<details><summary>ID запису, тариф та час</summary><p class="pb-note">Порожній ID запису система створить під час формування звіту.</p>'+['uid',...extras].map(input).join('')+'</details>';
+      const buildingId=kind==='journal'?state?.meterIndex?.[r.meterNumber]:undefined;
       const building=buildingId===undefined?null:state?.buildings?.find(b=>String(b.id)===String(buildingId));
       const buildingNote=building?'<p class="pb-note">Будівля за реєстром лічильників: '+esc(building.name)+'</p>':'';
-      const rule=stream==='journal'?'<details><summary>Запам’ятати реквізити закладу й постачальника</summary><p>Реквізити застосовуються до порожніх полів для цього лічильника та послуги. Укажіть період дії договору.</p><div class="pb-row">'+field('start','Початок дії','date')+field('end','Кінець дії','date')+'</div><label class="pb-check"><input type="checkbox" id="pub-rule"> Зберегти ці реквізити в довіднику</label></details>':'';
+      const rule=kind==='journal'?'<details><summary>Запам’ятати реквізити закладу й постачальника</summary><p>Реквізити застосовуються до порожніх полів для цього лічильника та послуги. Укажіть період дії договору.</p><div class="pb-row">'+field('start','Початок дії','date')+field('end','Кінець дії','date')+'</div><label class="pb-check"><input type="checkbox" id="pub-rule"> Зберегти ці реквізити в довіднику</label></details>':'';
       const conflict=opts?'<label>Запис для заміни<select id="pub-target">'+opts+'</select></label><div class="pb-row">'+btn('replace','Замінити вибраний')+btn('add','Зберегти як окреме зняття')+'</div>':'';
-      return '<section id="pub-edit" class="pb-box"><h3>Редагування запису</h3>'+buildingNote+'<p id="pub-err" role="status">'+esc(m?.message)+'</p><div class="pb-in">'+form+'</div>'+rule+conflict+'<div class="pb-row">'+btn('save','Зберегти','class="pb-primary"')+(stream==='journal'?btn('skip','Пропустити запис'):'')+btn('close','Закрити')+'</div></section>';
+      return '<section id="pub-edit" class="pb-box"><h3>Показання лічильника</h3>'+buildingNote+'<p id="pub-err" role="status">'+esc(m?.message)+'</p><div class="pb-in">'+form+'</div>'+rule+conflict+'<div class="pb-row">'+btn('save','Зберегти показання','class="pb-primary"')+(kind==='journal'&&!draft?btn('skip','Пропустити запис'):'')+btn('close','Закрити')+'</div></section>';
     }
     function addRule(r){
       const v=Object.fromEntries(['meterNumber','type',...refFields].map(f=>[f,r[f]]));
@@ -180,15 +209,113 @@
       for(const item of s.journal)applyRules(item,s.rules);
     }
     function edit(r,choice){
-      const draft={...r};
-      for(const f of [...fields,...extras])if(el('f-'+f))draft[f]=el('f-'+f).value.trim();
-      if(/^[-+]?\d+,\d+$/.test(draft.quantity))draft.quantity=draft.quantity.replace(',','.');
-      try{if(el('rule')?.checked)addRule(draft);}catch(e){el('err').textContent=e.message;return;}
-      Object.assign(r,draft,{_choice:choice,_target:choice==='replace'?el('target')?.value:''});
-      active='';review=false;save('Рішення збережено.');draw();
+      const updated={...r};
+      for(const f of [...fields,...extras])if(el('f-'+f))updated[f]=el('f-'+f).value.trim();
+      if(/^[-+]?\d+,\d+$/.test(updated.quantity))updated.quantity=updated.quantity.replace(',','.');
+      if(draft||stream==='journal'){applyRegistry(updated,state);applyRules(updated,s.rules);}
+      try{if(el('rule')?.checked)addRule(updated);}catch(e){el('err').textContent=e.message;return;}
+      Object.assign(r,updated,{_choice:choice,_target:choice==='replace'?el('target')?.value:''});
+      if(draft){
+        if(!s.journal.some(item=>item._key===r._key))s.journal.push(r);
+        draft=null;
+      }
+      active='';review=false;
+      const result=plan(s), status=result.meta.get(r._key);
+      const needsWork=status?.status==='error'||status?.status==='conflict';
+      if(!needsWork){view='result';viewPage=0;query='';}
+      save(needsWork?'Запис у чернетці. '+status.message:'Показання збережено. Таблицю resources.csv оновлено.');
+      draw();
+    }
+    function previewShell(p){
+     const count=Object.keys(state.periods).length;
+     const periods=Object.keys(state.periods).sort();
+     let emptyHint='';
+     if(!catalog.length&&!s.journal.length&&!s.base.length){
+       emptyHint=count?`Імпортовано річні звіти за ${periods.join(', ')}. Додайте «Лічильники (3).xlsx» для підготовки рядків за приладами або журнал із фактичними показаннями.`:'Завантажте реєстр будівель і «Лічильники (3).xlsx» у розділі «Імпорт» або додайте журнал показань.';
+     }
+     return section('Звіт resources.csv',`<p>Дані надходять із розділу <a href="#import">«Імпорт»</a>. Одне зняття показання — один рядок звіту.</p>
+     ${emptyHint?`<p class="notice">${esc(emptyHint)}</p>`:''}
+     <div class="pb-row report-tabs" role="group" aria-label="Режим таблиці">
+     <button id="pub-view-meters" aria-pressed="${view==='meters'}">Лічильники з імпорту (${catalog.length})</button>
+     <button id="pub-view-result" aria-pressed="${view==='result'}">Результат CSV (${p.output.length})</button></div>
+     <label class="report-search">Пошук у таблиці<input id="pub-search" placeholder="ID лічильника, заклад або послуга" value="${esc(query)}"></label>
+     <div id="pub-grid"></div><p class="pb-note" id="pub-feedback" aria-live="polite">${esc(feedback)}</p>
+     ${catalog.length&&!Object.keys(state.meterResources||{}).length?`<p class="pb-note">Для раніше збережених даних повторно завантажте «Лічильники (3).xlsx», щоб автоматично підставити послугу й одиницю.</p>`:''}
+     ${catalog.length?btn('draftCSV','Завантажити заготовку лічильників') : ''}
+     <div class="report-download"><label class="pb-check"><input type="checkbox" id="pub-review" ${review?'checked ':''}${p.blocked||!p.output.length?'disabled':''}> Підтверджую перевірку звіту</label>
+     ${btn('export','Завантажити resources.csv','class="pb-primary" '+(!review||p.blocked||!p.output.length?'disabled':''))}
+     ${p.blocked?`<span class="pb-note">Потребують перевірки: ${p.blocked}. <a href="#pub-audit" id="pub-seeProblems">Переглянути записи</a></span>`:''}</div>`);
+    }
+    function annualSample(){
+      const years=Object.keys(state.periods).sort();
+      if(catalog.length||!years.length)return '';
+      const rows=[];
+      for(const b of state.buildings){
+        for(const year of years){
+          const values=b.years?.[year];
+          if(!values?.some(v=>v!==null&&v!==undefined))continue;
+          const cells=values.map(v=>'<td>'+esc(v==null?'—':new Intl.NumberFormat('uk-UA',{maximumFractionDigits:3}).format(v))+'</td>').join('');
+          rows.push('<tr><td>'+esc(b.name)+'</td><td>'+esc(year)+'</td>'+cells+'</tr>');
+          if(rows.length===6)break;
+        }
+        if(rows.length===6)break;
+      }
+      if(!rows.length)return '';
+      return section('Річні дані з імпорту','<p>Перші '+rows.length+' заповнених рядків. Ці значення показують споживання будівлі за період. Для resources.csv потрібні показання окремого приладу на дату зняття.</p><div class="pb-scroll"><table><thead><tr>'+['Будівля','Рік','Тепло, Гкал','Електроенергія, кВт·год','Газ, м³','Холодна вода, м³','Гаряча вода, м³'].map(h=>'<th scope="col">'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>');
+    }
+    function drawPreview(p){
+     const isResult=view==='result';
+     const pending=new Map();
+     for(const r of s.journal){
+       if(p.meta.get(r._key)?.status==='error'&&!pending.has(r.meterNumber))pending.set(r.meterNumber,r);
+     }
+     const source=isResult?p.output:catalog;
+     const term=query.trim().toLocaleLowerCase('uk');
+     const searchFields=isResult?fields:['buildingName','meterNumber','organizationName','organizationId','type','unitName'];
+     const filtered=source.filter(row=>!term||searchFields.some(f=>String(row[f]??'').toLocaleLowerCase('uk').includes(term)));
+     const pages=Math.max(1,Math.ceil(filtered.length/12));viewPage=Math.max(0,Math.min(viewPage,pages-1));
+     const columns=isResult?fields:['meterNumber','type','unitName','date','quantity','organizationName','organizationId','providerName','providerId','uid'];
+     const rs=filtered.slice(viewPage*12,viewPage*12+12);
+     const parts=rs.map(record=>{
+       const r=isResult?record:pending.get(record.meterNumber)||record;
+       const first=isResult?'':`<td><button data-read-meter="${esc(record.meterNumber)}">${pending.has(record.meterNumber)?'Дозаповнити':'Ввести показання'}</button><small>${esc(record.buildingName)}</small></td>`;
+       const cell=f=>isResult&&f==='uid'?`<button type="button" title="Переглянути та змінити запис" data-result-key="${esc(r._editKey||r._key)}">${esc(r.uid||'—')}</button>`:esc(clean(r[f])||'—');
+       let tr=`<tr>${first}${columns.map(f=>`<td>${cell(f)}</td>`).join('')}</tr>`;
+       if(!isResult&&draft&&draft.meterNumber===record.meterNumber){
+         tr+=`<tr><td colspan="${columns.length+1}" class="report-editor">${editor(draft,p.meta.get(draft._key),'journal')}</td></tr>`;
+       }
+       return tr;
+     });
+     const head=columns.map(f=>`<th scope="col">${esc(title[f])}<small>${esc(f)}</small></th>`).join('');
+     const hint=isResult?'Збережені показання з’являться тут після заповнення обов’язкових полів.':'Дані про лічильники з’являться після імпорту їхнього реєстру.';
+     el('grid').innerHTML=`<p class="pb-note">${isResult?'Попередній перегляд усіх 10 колонок у порядку експорту.':'Заготовки за реєстром. Введіть фактичну дату й показання для потрібного приладу. Незаповнені заготовки не входять до resources.csv.'}</p>`+
+     (rs.length?`<div class="pb-scroll" tabindex="0" aria-label="Таблиця звіту"><table class="report-table"><thead><tr>${isResult?'':'<th scope="col">Будівля та дія</th>'}${head}</tr></thead><tbody>${parts.join('')}</tbody></table></div>`:`<p class="empty">${term?'Нічого не знайдено.':hint}</p>`)
+     +`<div class="pb-row"><span>Рядків: ${filtered.length} · сторінка ${viewPage+1} із ${pages}</span>${btn('grid-prev','Назад',viewPage===0?'disabled':'')}${btn('grid-next','Далі',viewPage+1>=pages?'disabled':'')}</div>`;
+     click('grid-prev',()=>{draft=null;viewPage--;drawPreview(p);});click('grid-next',()=>{draft=null;viewPage++;drawPreview(p);});
+     for(const button of el('grid').querySelectorAll('[data-result-key]'))button.onclick=()=>{
+       active=button.dataset.resultKey;
+       stream=s.journal.some(r=>r._key===active)?'journal':'base';
+       filter='all';page=Math.floor(s[stream].findIndex(r=>r._key===active)/12);
+       draft=null;review=false;draw();el('f-date')?.focus();
+     };
+     for(const b of el('grid').querySelectorAll('[data-read-meter]'))b.onclick=()=>{
+       const row=catalog.find(x=>x.meterNumber===b.dataset.readMeter);
+       draft=pending.get(row.meterNumber)||{...Object.fromEntries([...fields,...extras].map(f=>[f,row[f]||''])),_key:'entry-'+crypto.randomUUID()};
+       active='';review=false;stream='journal';draw();el('f-date')?.focus();
+     };
+     if(draft){
+       click('save',()=>edit(draft,''));click('close',()=>{draft=null;draw();});
+       const dateInput=el('f-date');
+       if(dateInput)dateInput.onchange=()=>{
+         const copy={...draft,date:dateInput.value};
+         for(const f of refFields)copy[f]=el('f-'+f).value.trim();
+         applyRegistry(copy,state);applyRules(copy,s.rules);
+         for(const f of refFields)if(!el('f-'+f).value)el('f-'+f).value=copy[f]||'';
+       };
+     }
     }
     function draw(){
-      const p=plan(s),all=[...p.meta.values()], visible=s[stream].filter(r=>filter==='all'||['error','conflict'].includes(p.meta.get(r._key)?.status));
+      const p=plan(s), visible=s[stream].filter(r=>filter==='all'||['error','conflict'].includes(p.meta.get(r._key)?.status));
       page=Math.max(0,Math.min(page,Math.ceil(visible.length/12)-1));
       const editing=s[stream].find(r=>r._key===active);
       const display=visible.slice(12*page,12*page+12);
@@ -196,26 +323,33 @@
       const table=rows?'<div class="pb-scroll"><table><thead><tr><th>Дата</th><th>Лічильник</th><th>Послуга</th><th>Показання</th><th>Стан</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="pb-note">Немає записів у вибраній групі.</p>';
       const pager=visible.length>12?'<div class="pb-row">'+btn('prev','Назад',page===0?'disabled':'')+' Сторінка '+(page+1)+' з '+Math.ceil(visible.length/12)+' '+btn('next','Далі',12*(page+1)>=visible.length?'disabled':'')+'</div>':'';
       host.innerHTML='<div class="pub-wrap"><style>'+css+'</style>'+
-        section('Підготовка resources.csv','<p>Один запис журналу — одне зняття показання приладу. Річні підсумки використовуються для паспорта будівлі.</p><div class="pb-row">'+fileBtn('journal','Додати журнал CSV')+fileBtn('base','Додати попередній resources.csv')+'</div><details><summary>Формат журналу та шаблон</summary><p>CSV у UTF-8, роздільник — кома або крапка з комою. Обов’язкові заголовки: <code>date, meterNumber, type, quantity, unitName</code>. Можна додати реквізити закладу та постачальника, <code>uid</code>, <code>tariff</code>, <code>timestamp</code>. Для багатотарифного приладу кожна зона має власний запис. Для кількох знять за одну дату передавайте стабільний UID. Точний формат початкового журналу uMuni потрібно звірити зі зразком.</p><div class="pb-row">'+btn('template','Порожній шаблон')+btn('example','Умовний приклад CSV')+'</div></details><p class="pb-note">Журнал і реквізити зберігаються в цьому браузері.</p>')+
-        section('Перевірка записів','<p>У журналі: <b>'+s.journal.length+'</b> · Попередніх: <b>'+s.base.length+'</b> · Потребують рішення: <b>'+p.blocked+'</b></p><div class="pb-row"><label>Джерело<select id="pub-stream"><option value="journal">Новий журнал</option><option value="base">Попередній ресурс</option></select></label><label>Показати<select id="pub-filter"><option value="needed">Потребують рішення</option><option value="all">Усі записи</option></select></label></div>'+table+pager+(editing?editor(editing,p.meta.get(editing._key)):''))+
-        section('Вивантаження','<p>У кінцевій таблиці: <b>'+p.output.length+'</b>. Нових: '+all.filter(m=>m.status==='new').length+', оновлених: '+all.filter(m=>m.status==='changed').length+', без змін: '+all.filter(m=>m.status==='same').length+'.</p><label class="pb-check"><input type="checkbox" id="pub-review" '+(review?'checked ':'')+(p.blocked||!p.output.length?'disabled':'')+'> Я перевірив(-ла) записи та підтверджую формування CSV.</label><div class="pb-row">'+btn('export','Завантажити resources.csv','class="pb-primary" '+(!review||p.blocked||!p.output.length?'disabled':''))+(s.base.length||s.journal.length?btn('reset','Почати іншу публікацію'):'')+'</div><p class="pb-note">Подайте файл через кабінет розпорядника для оновлення наявного ресурсу. <a href="https://data.gov.ua/pages/835-recm-infrastructure-resources" target="_blank" rel="noopener">Рекомендації порталу</a></p>')+
+        previewShell(p)+
+        annualSample()+
+        section('Додати журнал або попередню публікацію','<p>Один запис журналу — одне зняття показання приладу. Річні підсумки використовуються для паспорта будівлі.</p><div class="pb-row">'+fileBtn('journal','Додати журнал CSV')+fileBtn('base','Додати попередній resources.csv')+'</div><details><summary>Формат журналу та шаблон</summary><p>CSV у UTF-8, роздільник — кома або крапка з комою. Обов’язкові заголовки: <code>date, meterNumber, quantity</code>. Для відомого лічильника сервіс підставляє <code>type</code> та <code>unitName</code> із реєстру. Їх можна також передати у файлі. Можна додати реквізити закладу та постачальника, <code>uid</code>, <code>tariff</code>, <code>timestamp</code>. Для багатотарифного приладу кожна зона має власний запис. Для кількох знять за одну дату передавайте стабільний UID. Точний формат початкового журналу uMuni потрібно звірити зі зразком.</p><div class="pb-row">'+btn('template','Порожній шаблон')+btn('example','Умовний приклад CSV')+'</div></details><p class="pb-note">Журнал і реквізити зберігаються в цьому браузері.</p>')+
+        '<div id="pub-audit">'+section('Перевірка записів','<p>У журналі: <b>'+s.journal.length+'</b> · Попередніх: <b>'+s.base.length+'</b> · Потребують рішення: <b>'+p.blocked+'</b></p><div class="pb-row"><label>Джерело<select id="pub-stream"><option value="journal">Новий журнал</option><option value="base">Попередній ресурс</option></select></label><label>Показати<select id="pub-filter"><option value="needed">Потребують рішення</option><option value="all">Усі записи</option></select></label></div>'+table+pager+(editing?editor(editing,p.meta.get(editing._key)):''))+'</div>'+
+        (s.base.length||s.journal.length?'<p>'+btn('reset','Почати іншу публікацію')+'</p>':'')+
         (s.rules.length?'<details class="pb-box"><summary>Збережені реквізити ('+s.rules.length+')</summary><p class="pb-note">Видалення правила діє для наступних імпортів; уже перевірені рядки зберігаються.</p>'+s.rules.map((r,i)=>'<div class="pb-row"><span>'+esc([r.meterNumber,r.type,r.providerName,(r.start||'без початкової дати')+' — '+(r.end||'без кінцевої дати')].join(' · '))+'</span><button type="button" data-rule-index="'+i+'">Вилучити правило</button></div>').join('')+'</details>':'')+
-        '<p class="pb-msg" role="status">'+esc(feedback)+'</p></div>';
+        '</div>';
+      drawPreview(p);
+      for(const key of ['meters','result'])click('view-'+key,()=>{view=key;viewPage=0;query='';active='';draft=null;draw();});
+      el('search').oninput=e=>{query=e.target.value;viewPage=0;draft=null;drawPreview(p);};
+      click('draftCSV',()=>helpers.download('resources-draft.csv',asCsv(catalog)));
+      click('seeProblems',e=>{e.preventDefault();stream=s.journal.some(r=>['error','conflict'].includes(p.meta.get(r._key)?.status))?'journal':'base';filter='needed';page=0;draft=null;active='';draw();el('audit').scrollIntoView({block:'start'});});
       el('stream').value=stream;el('filter').value=filter;
-      el('stream').onchange=e=>{stream=e.target.value;active='';page=0;draw();};
-      el('filter').onchange=e=>{filter=e.target.value;active='';page=0;draw();};
+      el('stream').onchange=e=>{stream=e.target.value;active='';draft=null;page=0;draw();};
+      el('filter').onchange=e=>{filter=e.target.value;active='';draft=null;page=0;draw();};
       for(const kind of ['base','journal'])el(kind).onchange=async e=>{
         const file=e.target.files?.[0];if(!file)return;
-        try{const added=importData(s,await file.text(),kind,state);stream=kind;filter='all';page=0;active='';review=false;save('Додано записів: '+added+'.');}catch(err){feedback=err.message;}draw();
+        try{const added=importData(s,await file.text(),kind,state);stream=kind;filter='all';page=viewPage=0;active='';draft=null;view=plan(s).output.length?'result':'meters';query='';review=false;save('Додано записів: '+added+'.');}catch(err){feedback=err.message;}draw();
       };
       click('template',()=>helpers.download('journal-template.csv',asCsv([],[...fields,...extras])));
       click('example',()=>helpers.download('journal-example-demo.csv',asCsv([example],[...fields,...extras])));
       click('prev',()=>{page--;active='';draw();});click('next',()=>{page++;active='';draw();});
-      for(const b of host.querySelectorAll('[data-pk]'))b.onclick=()=>{active=b.dataset.pk;draw();el('edit')?.scrollIntoView({block:'nearest'});};
+      for(const b of host.querySelectorAll('[data-pk]'))b.onclick=()=>{draft=null;active=b.dataset.pk;draw();el('edit')?.scrollIntoView({block:'nearest'});};
       for(const b of host.querySelectorAll('[data-rule-index]'))b.onclick=()=>{if(window.confirm('Вилучити правило довідника?')){s.rules.splice(Number(b.dataset.ruleIndex),1);save('Правило вилучено.');draw();}};
       el('review').onchange=e=>{review=e.target.checked;el('export').disabled=!review;};
       click('export',()=>{if(review&&!p.blocked&&p.output.length){helpers.download('resources.csv',asCsv(p.output));helpers.notify?.('CSV сформовано');}});
-      click('reset',()=>{if(window.confirm('Очистити всі записи цієї публікації? Збережені реквізити залишаться у браузері.')){s.journal=[];s.base=[];page=0;review=false;active='';save('Записи очищено.');draw();}});
+      click('reset',()=>{if(window.confirm('Очистити всі записи цієї публікації? Збережені реквізити залишаться у браузері.')){s.journal=[];s.base=[];page=viewPage=0;review=false;active='';draft=null;view='meters';query='';save('Записи очищено.');draw();}});
       if(editing){for(const mode of ['replace','add','skip'])click(mode,()=>edit(editing,mode));click('save',()=>edit(editing,''));click('close',()=>{active='';draw();});}
     }
     draw();
