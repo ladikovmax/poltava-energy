@@ -25,7 +25,7 @@
                 <a href="#overview">Огляд</a>
                 <a href="#passport">Паспорти</a>
                 <a href="#import">Імпорт</a>
-                <a href="#publication">Формування звітів</a>
+                <a href="#publication">Звіти</a>
             </nav>
             <span class="geo">
                 <svg width="16" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -44,17 +44,27 @@
     <noscript>Для розрахунків у браузері потрібно увімкнути JavaScript.</noscript>
 
 
+    <!-- Бібліотеки -->
     <script src="vendor/jquery/jquery.min.js"></script>
     <script src="vendor/sheetjs/sheetjs.min.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/model.js"></script>
-    <script src="js/import.js"></script>
-    <script src="js/publication.js"></script>
-    <script src="js/workspace-state.js"></script>
-    <script src="js/workspace-ui.js"></script>
-    <script src="js/page-overview.js"></script>
-    <script src="js/page-passport.js"></script>
-    <script src="js/page-import.js"></script>
+
+    <!-- 1. Імпорт -->
+    <script src="js/import/import-core.js"></script>
+    <script src="js/import/import-ui.js"></script>
+
+    <!-- 2. Паспорти будівель (Ф-02) -->
+    <script src="js/passport/passport-core.js"></script>
+    <script src="js/passport/passport-ui.js"></script>
+
+    <!-- 3. Головна сторінка: Огляд -->
+    <script src="js/overview/overview-core.js"></script>
+    <script src="js/overview/overview-ui.js"></script>
+
+    <!-- 4. Формування звітів (Data.gov.ua) -->
+    <script src="js/reports/reports-core.js"></script>
+    <script src="js/reports/reports-ui.js"></script>
+
+    <!-- Маршрутизатор -->
     <script src="js/app.js"></script>
 </body>
 </html>

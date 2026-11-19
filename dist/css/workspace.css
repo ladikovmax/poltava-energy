@@ -534,3 +534,102 @@
 .pub-wrap #pub-grid .pb-scroll:focus-visible {
     outline: 2px solid var(--green);
 }
+
+/* Інтерактивні рядки діаграми категорій */
+.bar-interactive {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 6px 8px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.bar-interactive:hover { background: #f4f8f5; }
+.bar-interactive.is-active { background: #eef5f0; border-color: #bfd5c7; }
+.bar-pct { font-weight: 400; color: #64748b; font-size: 0.8em; }
+
+/* Сегментований перемикач У рейтингу / Поза рейтингом */
+.seg-tabs {
+    display: inline-flex;
+    background: #f1f5f2;
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid #dce4df;
+}
+.seg-btn {
+    border: 0;
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.seg-btn.is-active {
+    background: #ffffff;
+    color: #123e32;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+/* Візуалізація відхилення від медіани в таблиці */
+.row-addr { display: block; margin-top: 2px; font-size: 0.8rem; }
+.num-strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.diff-cell { display: flex; align-items: center; gap: 10px; }
+.diff-badge {
+    min-width: 52px;
+    text-align: right;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.diff-badge.diff-bad { color: #b91c1c; }
+.diff-badge.diff-good { color: #15803d; }
+.diff-badge.diff-neutral { color: #475569; }
+
+.mini-meter {
+    position: relative;
+    width: 76px;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: visible;
+}
+.mini-fill { display: block; height: 100%; border-radius: 999px; background: #64748b; }
+.mini-fill.diff-bad { background: #dc2626; }
+.mini-fill.diff-good { background: #16a34a; }
+.mini-median-mark {
+    position: absolute;
+    left: 50%;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: #0f172a;
+    border-radius: 1px;
+}
+
+/* Бейдж медіани та тег дефекту */
+.median-pill { background: #eef5f0; color: #123e32; border: 1px solid #cfe0d5; }
+.defect-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 0.82rem;
+}
+
+/* Контрастніші класи F та G */
+.grade.f { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+.grade.g { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+/* Підсумковий рядок у зведенні 2025 */
+.row-total td { font-weight: 600; background: #f4f8f5; }
+details.panel > summary { display: flex; justify-content: space-between; align-items: center; }
