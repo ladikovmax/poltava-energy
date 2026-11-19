@@ -80,20 +80,37 @@ function importPage(){
  <ul><li><b>Річне_використання_ресурсів (50).xlsx</b><span>Споживання за 2026 рік станом на 11 листопада.</span></li>
  <li><b>Лічильники (3).xlsx</b><span>Прилади обліку та їхній зв’язок із будівлями.</span></li>
  <li><b>Інформація щодо впровадження СЕМ у Полтавській ТГ 13.07.2026.xlsx</b><span>Довідник суб’єктів СЕнМ для зведення за організаціями.</span></li></ul>
- <p class="footnote">Документ ТЗ у форматі DOCX пропустіть. Після імпорту лічильників відкрийте «Відкриті дані». Показання можна ввести в таблиці або завантажити журнал нижче.</p></section>
- <div class="import-tools"><section class="panel"><h2>2. Імпортуйте XLSX</h2><p class="muted">Оберіть два або всі п’ять завантажених файлів одночасно й натисніть «Опрацювати файли».</p>
+ <p class="footnote">Документ ТЗ у форматі DOCX пропустіть. Після імпорту відкрийте «Відкриті дані», щоб переглянути споживання за всі роки та реєстр лічильників. Показання можна ввести в таблиці або завантажити журнал нижче.</p></section>
+ <div class="import-tools"><section class="panel"><h2>2. Імпортуйте XLSX</h2><p class="muted">Додавайте файли по одному або разом. Перевірте список і натисніть «Опрацювати файли».</p>
  <div class="file-zone">${ico('upload')}<label class="field">Файли Excel<input type="file" accept=".xlsx" multiple id="files"></label><div><button class="btn primary" id="importFiles">Опрацювати файли</button></div></div>
+ <div id="fileQueue" role="status"></div>
  <div id="messages" role="status" class="import-result">${importMsg.map(m=>`<p>${esc(m)}</p>`).join('')}</div>
- ${Object.keys(data.periods).length?'<a class="btn secondary extras" href="#overview">Переглянути огляд</a>':''} ${Object.keys(data.meterIndex||{}).length?'<a class="btn primary extras" href="#publication">Підготувати resources.csv</a>':''}</section>
+ ${Object.keys(data.periods).length?'<a class="btn secondary extras" href="#overview">Переглянути огляд</a>':''} ${Object.keys(data.meterIndex||{}).length||Object.keys(data.periods).length?'<a class="btn primary extras" href="#publication">Переглянути імпортовані дані</a>':''}</section>
  <section class="panel">${pane('Робочі дані','Збережено у цьому браузері.')}<dl class="facts"><div><dt>Будівлі</dt><dd>${builds.length}</dd></div><div><dt>Лічильники</dt><dd>${Object.keys(data.meterIndex||{}).length}</dd></div><div><dt>Звітні роки</dt><dd>${esc(Object.keys(data.periods).sort().join(', ')||'—')}</dd></div></dl>
  <p class="footnote">Після імпорту всіх п’яти файлів із цієї папки очікуйте 311 будівель, 1 097 лічильників і два звітні роки.</p>
  <button type="button" class="btn secondary extras" id="clear-data">Очистити дані сайту</button></section></div></div>
- <section class="panel section-gap">${pane('Журнал показань для resources.csv','Якщо маєте фактичні показання, додайте їх тут. Журнал одразу потрапить у «Відкриті дані». ')}<p class="footnote">CSV UTF-8: date (РРРР-ММ-ДД), meterNumber (ID лічильника), quantity (показання). Інші колонки звіту можна додати до файлу або заповнити в таблиці.</p><div class="fields"><label class="field">Журнал CSV<input type="file" accept=".csv,text/csv" id="journalFile"></label><button id="importJournal" class="btn secondary">Додати показання</button><a href="#publication">Відкрити таблицю resources.csv</a></div><p id="journalMessage" role="status"></p></section>
+ <section class="panel section-gap">${pane('Журнал показань для resources.csv','Якщо маєте фактичні показання, додайте їх тут. Журнал одразу потрапить у «Відкриті дані». ')}<p class="footnote">CSV UTF-8: date (РРРР-ММ-ДД), meterNumber (номер лічильника або ID uMuni), quantity (показання). Інші колонки звіту можна додати до файлу або заповнити в таблиці.</p><div class="fields"><label class="field">Журнал CSV<input type="file" accept=".csv,text/csv" id="journalFile"></label><button id="importJournal" class="btn secondary">Додати показання</button><a href="#publication">Відкрити таблицю resources.csv</a></div><p id="journalMessage" role="status"></p></section>
  <section class="panel section-gap">${pane('Якість даних','Пропуски, непридатна площа та розбіжності між лічильниками й споживанням.')}<button class="btn secondary" id="defects">${ico('download')}Завантажити data-defects.csv</button></section>
  <section class="panel">${pane('Зв’язки із суб’єктами СЕнМ',ids.length?`${ids.length} суб’єктів у довіднику. Підтвердьте зв’язок для зведення.`:'Завантажте файл D2-05, щоб прив’язати будівлю до суб’єкта.')} ${ids.length?`<div class="form-grid"><label class="field">Будівля<select id="linkBuilding">${options('')}</select></label><label class="field">Суб’єкт<select id="linkSubject"></select></label><button class="btn primary" id="saveLink">Зберегти зв’язок</button></div>`:''}</section>
  ${(data.pending||[]).length?`<section class="panel">${pane('Зіставлення будівель',`${data.pending.length} рядків потребують рішення.`)}<label class="field">Рядок звіту<select id="pendingRow">${data.pending.map((v,i)=>opt(i,`${v.year} · ${v.name} · ${v.address}`,'')).join('')}</select></label><div class="form-grid extras"><label class="field">Будівля реєстру<select id="pendingBuilding"><option value="">Оберіть будівлю</option>${options('')}</select></label><button id="resolve" class="btn primary">Підтвердити збіг</button></div></section>`:''}
  <section class="panel">${pane('Теплота згоряння газу','Коефіцієнт застосовується до всіх завантажених років.')}<div class="fields"><label class="field">кВт·год/м³<input id="gas" type="number" min="0.01" max="25" step="any" value="${gas}"></label><button id="saveGas" class="btn secondary">Перерахувати</button></div></section>${methodology()}`;
- document.querySelector('#importFiles').onclick=async e=>{const files=[...document.querySelector('#files').files];if(!files.length){notify('Спершу оберіть XLSX-файли.');return;}const btn=e.currentTarget;btn.disabled=true;btn.textContent='Обробка…';try{const result=await EnergyImport.readFiles(files,data);data=result.state;importMsg=result.messages;save();if(!data.periods[year])year=Object.keys(data.periods).sort()[0]||'2025';query='';cat='';page=1;render();notify('Імпорт завершено');}catch(err){document.querySelector('#messages').textContent=err.message;btn.disabled=false;btn.textContent='Опрацювати файли';}};
+ const queued=new Map(),filesInput=document.querySelector('#files'),queueBox=document.querySelector('#fileQueue');
+ function showQueue(){
+   queueBox.innerHTML=queued.size?'<p>Обрано файлів: '+queued.size+'</p><ul>'+Array.from(queued.keys(),name=>'<li>'+esc(name)+' <button type="button" data-remove-file="'+esc(name)+'" aria-label="Вилучити '+esc(name)+'">Вилучити</button></li>').join('')+'</ul>':'';
+ }
+ filesInput.onchange=()=>{for(const file of filesInput.files)queued.set(file.name,file);filesInput.value='';showQueue();};
+ queueBox.onclick=e=>{const button=e.target.closest('[data-remove-file]');if(button){queued.delete(button.dataset.removeFile);showQueue();}};
+ document.querySelector('#importFiles').onclick=async e=>{
+   if(!queued.size){notify('Спершу оберіть XLSX-файли.');return;}
+   const btn=e.currentTarget;btn.disabled=filesInput.disabled=true;queueBox.inert=true;btn.textContent='Обробка…';
+   try{
+     const result=await EnergyImport.readFiles([...queued.values()],data);data=result.state;importMsg=result.messages;save();
+     if(!data.periods[year])year=Object.keys(data.periods).sort()[0]||'2025';
+     query='';cat='';page=1;render();notify('Імпорт завершено');
+   }catch(err){
+     document.querySelector('#messages').textContent=err.message;btn.disabled=filesInput.disabled=false;queueBox.inert=false;btn.textContent='Опрацювати файли';
+   }
+ };
  document.querySelector('#importJournal').onclick=async e=>{
    const file=document.querySelector('#journalFile').files[0],message=document.querySelector('#journalMessage');
    if(!file){message.textContent='Оберіть журнал у форматі CSV.';return;}
