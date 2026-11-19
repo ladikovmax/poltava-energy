@@ -4,7 +4,7 @@ window.App = window.App || {};
     'use strict';
 
     // Орієнтовні тарифи Полтавської ТГ (з ПДВ) у грн за 1 МВт·год:
-    // Тепло: ~3 980 грн/Гкал (~3 422 грн/МВт·год), е/е: 14,77 грн/кВт·год, газ: 20,88 грн/м³ (~2 245 грн/МВт·год)
+    // Тепло: ~3 980 грн/Гкал (~3 422 грн/МВт·год), е/е: 14,77 грн/кВт·год, газ: 20,88 грн/м³ (~2 245 грн/мВт·год)
     const TARIFF_UAH_PER_MWH = [3422, 14770, 2245];
     const ENERGY_NAMES = ['Теплова енергія', 'Електроенергія', 'Природний газ'];
 
@@ -84,26 +84,34 @@ window.App = window.App || {};
             });
 
             const totalMwh = hasEnergy ? mwh : (raw.slice(0, 3).some(v => v === 0) ? 0 : null);
-            const excludes = [];
-            if (!full) excludes.push('Неповний звітний період');
-            if (!finite(b.area) || b.area <= 1.0) excludes.push('Фіктивна або відсутня площа (≤ 1,00 м²)');
-            if (totalMwh === null || totalMwh <= 0) excludes.push(`Нульове споживання у ${year} р.`);
+            const hasData = totalMwh !== null && totalMwh > 0;
+            const areaValid = finite(b.area) && b.area > 1.0;
 
-            const eligible = excludes.length === 0;
+            const excludes = [];
+            if (!areaValid) excludes.push('Фіктивна або відсутня площа (≤ 1,00 м²)');
+            if (!hasData) excludes.push(`Немає споживання у ${year} р.`);
+
+            // Питоме споживання рахуємо для всіх будівель із даними за обраний рік і коректною площею
+            const eligible = hasData && areaValid;
             const intensity = eligible ? (totalMwh * 1000) / b.area : null;
 
             return {
                 b,
                 category,
                 mwh: totalMwh,
+                hasData,
                 byResource,
                 eligible,
                 excludes,
                 intensity,
+                // Порівняння з еталонною річною медіаною та класи A–G — лише для повного звітного року
                 median: full && baseItem ? baseItem.median : null,
                 grade: full && baseItem?.gradeInfo ? baseItem.gradeInfo.grade : null
             };
         });
+
+        // Лише будівлі, які мають фактичне споживання у вибраному році
+        const activeRows = rows.filter(r => r.hasData);
 
         // Групування за категоріями
         const catMap = new Map();
@@ -124,6 +132,7 @@ window.App = window.App || {};
             period,
             full,
             rows,
+            activeRows,
             summary: summarize(rows),
             groups,
             energyNames: ENERGY_NAMES

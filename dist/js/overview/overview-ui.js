@@ -6,8 +6,19 @@ window.App = window.App || {};
     const Core = A.overviewCore;
     const COLORS = ['#1c5744', '#63a37e', '#b8db68'];
     const SHORT_NAMES = ['Тепло', 'Електрика', 'Газ'];
+    const ALL_CAT = '__ALL__';
     const RING_RADIUS = 50;
     const RING_CIRC = 2 * Math.PI * RING_RADIUS;
+
+    const GRADE_TIPS = {
+        A: 'Клас A · Найвища ефективність (кращі практики, значно нижче медіани)',
+        B: 'Клас B · Висока ефективність (помітно економніше за медіану групи)',
+        C: 'Клас C · Добра ефективність (нижче медіани групи)',
+        D: 'Клас D · Базовий рівень (відповідає медіані категорії)',
+        E: 'Клас E · Знижена ефективність (помірне перевищення медіани)',
+        F: 'Клас F · Низька ефективність (значні перевитрати проти медіани)',
+        G: 'Клас G · Критичні перевитрати або похибка площі / вузла обліку'
+    };
 
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmt = (v, p = 1) => (typeof v === 'number' && Number.isFinite(v))
@@ -17,6 +28,7 @@ window.App = window.App || {};
     const uiState = {
         year: '2025',
         cat: '',
+        donutCat: '',
         query: '',
         page: 1,
         showInvalid: false
@@ -63,15 +75,20 @@ window.App = window.App || {};
         }
 
         uiState.year = data.year;
-        const { rows, summary: s, groups, full, years, period } = data;
+        const { rows, activeRows, summary: s, groups, full, years, period } = data;
 
-        if (!groups.some(g => g.name === uiState.cat)) {
-            uiState.cat = groups.find(g => /навчальн|школ/i.test(g.name))?.name || groups[0]?.name || '';
+        const defaultCat = groups.find(g => /навчальн|школ/i.test(g.name))?.name || groups[0]?.name || '';
+        if (!groups.some(g => g.name === uiState.donutCat)) {
+            uiState.donutCat = defaultCat;
+        }
+        if (uiState.cat !== ALL_CAT && !groups.some(g => g.name === uiState.cat)) {
+            uiState.cat = uiState.donutCat;
         }
 
+        const isAllSelected = uiState.cat === ALL_CAT;
         const biggest = groups[0]?.total || 1;
-        const eligibleTotal = rows.filter(r => r.eligible).length;
-        const excludedWithData = Math.max(0, s.covered - eligibleTotal);
+        const eligibleTotal = activeRows.filter(r => r.eligible).length;
+        const excludedWithData = Math.max(0, activeRows.length - eligibleTotal);
         const baseline = Core.getBaseline2025();
 
         const legendHtml = data.energyNames
@@ -100,9 +117,9 @@ window.App = window.App || {};
                     <div class="stat-note">${s.costMln ? `≈ ${fmt(s.costMln, 1)} млн грн у цінах 2026 р.` : (full ? 'За повний звітний рік' : `Станом на ${esc(period.asOf)}`)}</div>
                 </article>
                 <article class="stat">
-                    <div class="stat-head">Будівлі у реєстрі</div>
-                    <strong>${fmt(rows.length, 0)}</strong>
-                    <div class="stat-note">${s.covered} зі споживанням · ${rows.length - s.covered} без даних</div>
+                    <div class="stat-head">Будівлі зі споживанням</div>
+                    <strong>${fmt(activeRows.length, 0)}<span class="suffix">із ${rows.length}</span></strong>
+                    <div class="stat-note">${rows.length - activeRows.length} без даних за ${data.year} рік</div>
                 </article>
                 <article class="stat">
                     <div class="stat-head">Базовий рівень СЕнМ</div>
@@ -112,7 +129,7 @@ window.App = window.App || {};
                 <article class="stat">
                     <div class="stat-head">Доступні для рейтингу</div>
                     <strong>${eligibleTotal}</strong>
-                    <div class="stat-note">${full ? `${excludedWithData} відсіяно через дефекти площі` : 'Рейтинг доступний за повний рік'}</div>
+                    <div class="stat-note">${excludedWithData} відсіяно через дефекти площі</div>
                 </article>
             </section>
 
@@ -129,7 +146,7 @@ window.App = window.App || {};
                     </div>
                     <div class="bars" id="ov-cat-bars">
                         ${groups.map(g => {
-                            const isActive = g.name === uiState.cat;
+                            const isActive = !isAllSelected && g.name === uiState.cat;
                             const pct = s.total ? Math.round(((g.total || 0) / s.total) * 100) : 0;
                             return `
                                 <button type="button" class="bar-row bar-interactive ${isActive ? 'is-active' : ''}" data-pick-cat="${esc(g.name)}">
@@ -145,7 +162,7 @@ window.App = window.App || {};
                     <div class="legend chart-foot">${legendHtml}</div>
                 </article>
 
-                <!-- Права картка: смуга громади + збалансований блок обраної категорії -->
+                <!-- Права картка: клікабельна смуга громади + блок обраної категорії -->
                 <article class="panel structure-panel">
                     <div class="panel-head">
                         <div>
@@ -155,11 +172,14 @@ window.App = window.App || {};
                         <span class="pill unit">${s.total ? `${fmt(s.total, 0)} МВт·год` : '—'}</span>
                     </div>
 
-                    <!-- 1. Горизонтальна смуга по всій громаді -->
-                    <div class="comm-mix">
+                    <!-- 1. Клікабельний блок по всій громаді за обраний рік -->
+                    <button type="button" class="comm-mix comm-mix-btn ${isAllSelected ? 'is-active' : ''}" id="ov-pick-all" title="Показати всі ${activeRows.length} споруд за ${data.year} рік у таблиці">
                         <div class="comm-mix-head">
-                            <span class="mix-eyebrow">Уся громада · ${s.covered} будівель</span>
-                            ${s.costMln ? `<span class="cell-meta">≈ ${fmt(s.costMln, 1)} млн грн</span>` : ''}
+                            <span class="mix-eyebrow">Уся громада · ${activeRows.length} буд. (${data.year})</span>
+                            <span class="mix-head-right">
+                                ${s.costMln ? `<span class="cell-meta nowrap">≈ ${fmt(s.costMln, 1)} млн грн</span>` : ''}
+                                <span class="mix-action-tag nowrap" id="ov-all-tag">${isAllSelected ? 'Обрано' : 'Усі →'}</span>
+                            </span>
                         </div>
                         <div class="stacked-strip" role="img" aria-label="Загальний баланс енергоносіїв по громаді">
                             ${s.shares.map((pct, i) => pct > 0
@@ -176,9 +196,9 @@ window.App = window.App || {};
                                 </span>
                             `).join('')}
                         </div>
-                    </div>
+                    </button>
 
-                    <!-- 2. Нижній блок з анімованим SVG-кругом для обраної категорії -->
+                    <!-- 2. Нижній блок з анімованим SVG-кругом для конкретної категорії -->
                     <div class="cat-drilldown" id="ov-cat-drilldown">
                         <div class="drill-head">
                             <div class="drill-top-row">
@@ -218,8 +238,10 @@ window.App = window.App || {};
             <section class="panel section-gap scroll-me" id="ov-ranking">
                 <div class="panel-head">
                     <div>
-                        <h2>Рейтинг енергоефективності будівель</h2>
-                        <p>${full ? 'Порівняння питомого споживання з медіаною своєї категорії' : 'Для неповного року доступний перегляд об’єктів та їхніх паспортів'}</p>
+                        <h2>Рейтинг енергоефективності будівель (${data.year} рік)</h2>
+                        <p>${full
+                            ? 'Порівняння питомого споживання з медіаною своєї категорії за повний звітний рік'
+                            : `Питоме споживання за неповний ${data.year} рік (до ${esc(period.asOf)}) · без оцінки класу A–G`}</p>
                     </div>
                     <div class="actions">
                         <span class="pill median-pill" id="ov-median-badge">Медіана групи: —</span>
@@ -229,7 +251,8 @@ window.App = window.App || {};
 
                 <div class="filterline">
                     <select id="ov-category" aria-label="Категорія будівель">
-                        ${groups.map(g => `<option value="${esc(g.name)}" ${g.name === uiState.cat ? 'selected' : ''}>${esc(g.name)} (${g.count})</option>`).join('')}
+                        <option value="${ALL_CAT}" ${isAllSelected ? 'selected' : ''}>Всі споруди за ${data.year} р. (${activeRows.length})</option>
+                        ${groups.map(g => `<option value="${esc(g.name)}" ${!isAllSelected && g.name === uiState.cat ? 'selected' : ''}>${esc(g.name)} (${g.covered})</option>`).join('')}
                     </select>
                     <label class="search">
                         <input id="ov-query" aria-label="Пошук будівлі" placeholder="Пошук за назвою або адресою..." value="${esc(uiState.query)}">
@@ -287,9 +310,9 @@ window.App = window.App || {};
             </details>
         `);
 
-        // Оновлення анімованого SVG-круга для обраної категорії
+        // Оновлення анімованого SVG-круга (показує обрану категорію uiState.donutCat за вибраний рік)
         function updateCategoryDonut(animateEntrance = true) {
-            const g = groups.find(item => item.name === uiState.cat) || groups[0];
+            const g = groups.find(item => item.name === uiState.donutCat) || groups[0];
             if (!g) return;
 
             const $box = $('#ov-cat-drilldown');
@@ -313,7 +336,7 @@ window.App = window.App || {};
             $('#ov-ring-total').text(g.total !== null ? fmt(g.total, 0) : '0');
             $('#ov-ring-share').text(s.total ? `${fmt(shareOfComm, 1)}% громади` : 'немає даних');
 
-            const catMedian = rows.find(r => r.category === g.name && r.median !== null)?.median;
+            const catMedian = full ? rows.find(r => r.category === g.name && r.median !== null)?.median : null;
             const toeText = g.toe !== null ? `${fmt(g.toe, 1)} т н. е.` : 'немає даних';
             const medText = catMedian ? ` · медіана ${fmt(catMedian, 1)} кВт·год/м²` : '';
             $('#ov-drill-toe').text(toeText + medText);
@@ -327,7 +350,6 @@ window.App = window.App || {};
                 }
             });
 
-            // Просторі дворядкові плашки: відсотки гарантовано всередині блоку
             $('#ov-drill-list').html(
                 SHORT_NAMES.map((name, i) => `
                     <div class="drill-row">
@@ -343,19 +365,26 @@ window.App = window.App || {};
             );
         }
 
-        // Малювання таблиці рейтингу
+        // Малювання таблиці рейтингу (виключно по спорудах із даними за вибраний рік)
         function drawRank() {
-            const catRows = rows.filter(r => r.category === uiState.cat);
+            const isAll = uiState.cat === ALL_CAT;
+            const catRows = isAll ? activeRows : activeRows.filter(r => r.category === uiState.cat);
             const validCount = catRows.filter(r => r.eligible).length;
             const invalidCount = catRows.length - validCount;
 
             $('#ov-tab-valid').text(`У рейтингу (${validCount})`);
             $('#ov-tab-invalid').text(`Поза рейтингом (${invalidCount})`);
 
-            const sampleMedian = catRows.find(r => r.median !== null)?.median;
-            $('#ov-median-badge').html(
-                sampleMedian ? `Медіана групи: <b>${fmt(sampleMedian, 1)}</b> кВт·год/м²` : 'Медіана групи: —'
-            );
+            if (!full) {
+                $('#ov-median-badge').text(`Зріз до ${period.asOf}`);
+            } else if (isAll) {
+                $('#ov-median-badge').text('Медіана: за категорією будівлі');
+            } else {
+                const sampleMedian = catRows.find(r => r.median !== null)?.median;
+                $('#ov-median-badge').html(
+                    sampleMedian ? `Медіана групи: <b>${fmt(sampleMedian, 1)}</b> кВт·год/м²` : 'Медіана групи: —'
+                );
+            }
 
             const matches = catRows
                 .filter(r => (uiState.showInvalid ? !r.eligible : r.eligible))
@@ -364,21 +393,25 @@ window.App = window.App || {};
             const q = uiState.query.toLocaleLowerCase('uk').trim();
             const indexed = matches
                 .map((r, i) => ({ r, i: i + 1 }))
-                .filter(({ r }) => !q || `${r.b.name} ${r.b.address || ''}`.toLocaleLowerCase('uk').includes(q));
+                .filter(({ r }) => !q || `${r.b.name} ${r.b.address || ''} ${r.category}`.toLocaleLowerCase('uk').includes(q));
 
             const totalPages = Math.max(1, Math.ceil(indexed.length / 10));
             uiState.page = Math.max(1, Math.min(totalPages, uiState.page));
             const display = indexed.slice((uiState.page - 1) * 10, uiState.page * 10);
 
             if (!display.length) {
-                $('#ov-rankrows').html(`<p class="empty">${full ? 'За цим фільтром будівель немає.' : 'Для побудови рейтингу оберіть повний 2025 рік або перейдіть у вкладку «Поза рейтингом».'}</p>`);
+                $('#ov-rankrows').html(`<p class="empty">За цим фільтром споруд у ${data.year} році немає.</p>`);
             } else {
                 const head = uiState.showInvalid
                     ? '<th>№</th><th>Будівля та адреса</th><th>Причина виключення з рейтингу</th><th>Спожито, МВт·год</th>'
-                    : '<th>Місце</th><th>Будівля та адреса</th><th>кВт·год/м²</th><th>Відхилення від медіани</th><th>Клас</th>';
+                    : (full
+                        ? '<th>Місце</th><th>Будівля та адреса</th><th>кВт·год/м²</th><th>Відхилення від медіани</th><th>Клас</th>'
+                        : '<th>Місце</th><th>Будівля та адреса</th><th>кВт·год/м²</th><th>Спожито, МВт·год</th><th>Клас</th>');
 
                 const body = display.map(({ r, i }) => {
-                    const addr = r.b.address ? `<span class="cell-meta row-addr">${esc(r.b.address)}</span>` : '';
+                    const subParts = [r.b.address, isAll ? r.category : ''].filter(Boolean);
+                    const addr = subParts.length ? `<span class="cell-meta row-addr">${esc(subParts.join(' · '))}</span>` : '';
+
                     if (uiState.showInvalid) {
                         return `
                             <tr>
@@ -389,11 +422,28 @@ window.App = window.App || {};
                             </tr>
                         `;
                     }
+
+                    if (!full) {
+                        return `
+                            <tr>
+                                <td class="rank">${i}</td>
+                                <td class="row-name"><button type="button" data-pass="${esc(r.b.id)}">${esc(r.b.name)}</button>${addr}</td>
+                                <td class="num-strong">${fmt(r.intensity, 1)}</td>
+                                <td>${fmt(r.mwh, 1)}</td>
+                                <td><span class="cell-meta" title="Клас ефективності визначається лише за повний календарний рік">—</span></td>
+                            </tr>
+                        `;
+                    }
+
                     const diffPct = r.median && r.intensity !== null ? ((r.intensity - r.median) / r.median) * 100 : null;
                     const diffSign = diffPct !== null ? (diffPct > 0 ? `+${fmt(diffPct, 0)}%` : `${fmt(diffPct, 0)}%`) : '—';
                     const diffCls = diffPct === null ? '' : diffPct > 15 ? 'diff-bad' : diffPct < -10 ? 'diff-good' : 'diff-neutral';
                     const ratioWidth = r.median && r.intensity !== null ? Math.min(100, Math.round((r.intensity / (r.median * 2)) * 100)) : 0;
-                    const gradeBadge = r.grade ? `<span class="grade ${r.grade.toLowerCase()}">${r.grade}</span>` : '—';
+
+                    const tip = r.grade ? (GRADE_TIPS[r.grade] || '') : '';
+                    const gradeBadge = r.grade
+                        ? `<span class="grade ${r.grade.toLowerCase()} grade-tip" data-tip="${esc(tip)}" aria-label="${esc(tip)}" tabindex="0">${r.grade}</span>`
+                        : '—';
 
                     return `
                         <tr>
@@ -414,10 +464,15 @@ window.App = window.App || {};
                     `;
                 }).join('');
 
+                const omittedCount = isAll
+                    ? rows.length - activeRows.length
+                    : rows.filter(r => r.category === uiState.cat && !r.hasData).length;
+                const omittedNote = omittedCount > 0 ? ` · ще ${omittedCount} без даних у ${data.year} р.` : '';
+
                 $('#ov-rankrows').html(`
                     <div class="table-wrap"><table class="data-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
                     <div class="table-end">
-                        <span class="cell-meta">Показано ${display.length} із ${indexed.length} будівель · сторінка ${uiState.page} із ${totalPages}</span>
+                        <span class="cell-meta">Показано ${display.length} із ${indexed.length} будівель · сторінка ${uiState.page} із ${totalPages}${omittedNote}</span>
                         <div class="section-actions">
                             <button type="button" class="btn secondary" id="ov-prev" ${uiState.page === 1 ? 'disabled' : ''}>Назад</button>
                             <button type="button" class="btn secondary" id="ov-next" ${uiState.page === totalPages ? 'disabled' : ''}>Далі</button>
@@ -429,21 +484,35 @@ window.App = window.App || {};
             $('#ov-prev').on('click', () => { uiState.page--; drawRank(); });
             $('#ov-next').on('click', () => { uiState.page++; drawRank(); });
             $('#ov-rank-csv').off('click').on('click', () => {
-                Core.downloadCsv(`Рейтинг-${uiState.year}-${uiState.cat}.csv`, [
-                    ['Місце', 'Будівля', 'Адреса', 'Категорія', 'кВт·год/м²', 'Медіана групи', 'Клас', 'Причина виключення'],
-                    ...indexed.map(({ r, i }) => [uiState.showInvalid ? '' : i, r.b.name, r.b.address, r.category, r.intensity, r.median, r.grade, r.excludes.join(' · ')])
+                const catFile = isAll ? 'Всі-споруди' : uiState.cat;
+                Core.downloadCsv(`Рейтинг-${uiState.year}-${catFile}.csv`, [
+                    ['Місце', 'Будівля', 'Адреса', 'Категорія', 'Спожито, МВт·год', 'кВт·год/м²', 'Медіана групи', 'Клас', 'Причина виключення'],
+                    ...indexed.map(({ r, i }) => [uiState.showInvalid ? '' : i, r.b.name, r.b.address, r.category, r.mwh, r.intensity, r.median, r.grade, r.excludes.join(' · ')])
                 ]);
             });
         }
 
         function selectCategory(catName) {
+            const isAll = catName === ALL_CAT;
+            const prevDonut = uiState.donutCat;
+
             uiState.cat = catName;
+            if (!isAll) {
+                uiState.donutCat = catName;
+            }
             uiState.page = 1;
+
             $('#ov-category').val(catName);
+            $('#ov-pick-all').toggleClass('is-active', isAll);
+            $('#ov-all-tag').text(isAll ? 'Обрано' : 'Усі →');
+
             $('#ov-cat-bars .bar-interactive').each(function () {
-                $(this).toggleClass('is-active', $(this).attr('data-pick-cat') === catName);
+                $(this).toggleClass('is-active', !isAll && $(this).attr('data-pick-cat') === catName);
             });
-            updateCategoryDonut(true);
+
+            if (!isAll && prevDonut !== catName) {
+                updateCategoryDonut(true);
+            }
             drawRank();
         }
 
@@ -451,11 +520,18 @@ window.App = window.App || {};
         requestAnimationFrame(() => updateCategoryDonut(true));
         drawRank();
 
+        $('#ov-pick-all').on('click', () => {
+            selectCategory(ALL_CAT);
+        });
+
         $('#ov-cat-bars').on('click', '[data-pick-cat]', function () {
             selectCategory($(this).attr('data-pick-cat'));
         });
 
         $('#ov-jump-rank').on('click', () => {
+            if (uiState.cat === ALL_CAT && uiState.donutCat) {
+                selectCategory(uiState.donutCat);
+            }
             document.getElementById('ov-ranking')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
