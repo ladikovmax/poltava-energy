@@ -1,7 +1,7 @@
-(function workspaceApp() {
+$(function workspaceApp() {
     'use strict';
 
-    const E = window.Energy, main = document.getElementById('main'), keys = window.EnergyStorage.keys, colors = ['#1c5744', '#71ab86', '#c0df73'];
+    const E = window.Energy, $main = $('#main'), keys = window.EnergyStorage.keys, colors = ['#1c5744', '#71ab86', '#c0df73'];
 
     // Екранування спеціальних HTML-символів для захисту від XSS-вразливостей
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -47,10 +47,10 @@
 
     // Відображення тимчасового спливаючого повідомлення (toast) на 4.8 секунди
     function notify(msg) {
-        const t = document.querySelector('#toast');
-        t.textContent = msg;
+        const $t = $('#toast');
+        $t.text(msg);
         clearTimeout(timer);
-        timer = setTimeout(() => t.textContent = '', 4800);
+        timer = setTimeout(() => $t.text(''), 4800);
     }
 
     // Збереження поточного стану робочих даних у localStorage із обробкою переповнення пам'яті
@@ -64,10 +64,8 @@
 
     // Ініціація завантаження текстового або CSV-файлу користувачем через віртуальне посилання
     function download(name, text) {
-        const blob = new Blob([text], { type: 'text/csv;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        a.click();
+        const blob = new Blob([text], { type: 'text/csv;charset=utf-8' }), url = URL.createObjectURL(blob);
+        $('<a>', { href: url, download: name })[0].click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
@@ -132,7 +130,7 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
     function overview() {
         if (!data.buildings.length || !Object.keys(data.periods).length) {
             const hasRegistry = data.buildings.length > 0;
-            main.innerHTML = header('Огляд енергоспоживання', '') + `<section class="panel">${pane(hasRegistry ? 'Реєстр завантажено' : 'Даних ще немає', hasRegistry ? 'Додайте річний звіт про споживання, щоб побачити показники громади.' : 'Для першої перевірки завантажте реєстр будівель і звіт за 2025 рік.')}<a class="btn primary" href="#import">${ico('upload')}Перейти до імпорту</a></section>`;
+            $main.html(header('Огляд енергоспоживання', '') + `<section class="panel">${pane(hasRegistry ? 'Реєстр завантажено' : 'Даних ще немає', hasRegistry ? 'Додайте річний звіт про споживання, щоб побачити показники громади.' : 'Для першої перевірки завантажте реєстр будівель і звіт за 2025 рік.')}<a class="btn primary" href="#import">${ico('upload')}Перейти до імпорту</a></section>`);
             return;
         }
         const rows = E.analyze(data, year, gas), s = E.summary(rows), cats = grouped(rows, r => r.b.category || ''), full = !!data.periods[year]?.full;
@@ -146,12 +144,12 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
             return `${colors[i]} ${start}% ${end}%`;
         }).join(',');
         const leg = E.energyNames.map((v, i) => `<span class="key-label"><i class="swatch" style="background:${colors[i]}"></i>${esc(v)}</span>`).join('');
-        main.innerHTML = header('Огляд енергоспоживання', 'Споживання, базовий рівень та порівняння будівель громади.', periodSelect() + `<a class="btn primary" href="#import">${ico('upload')}Імпорт XLSX</a>`)
+        $main.html(header('Огляд енергоспоживання', 'Споживання, базовий рівень та порівняння будівель громади.', periodSelect() + `<a class="btn primary" href="#import">${ico('upload')}Імпорт XLSX</a>`)
             + `<section class="stats">${stat('Енергоспоживання', fmt(s.total, 0), 'МВт·год', full ? 'За повний звітний рік' : 'За неповний звітний період', 'bolt')}${stat('Будівлі у реєстрі', fmt(rows.length, 0), '', `${s.covered} з даними про енергію`, 'build')}${stat('Еквівалент споживання', fmt(s.total === null ? null : s.total * .086, 1), 'т н. е.', year === '2025' ? 'Базовий рівень СЕнМ' : 'За обраний період', 'leaf')}${stat('Доступні для рейтингу', String(rows.filter(r => r.eligible).length), '', full ? 'Після перевірки повноти' : 'Рейтинг доступний за повний рік', 'chart')}</section>
  <section class="dashboard overview-charts"><article class="panel">${pane('Споживання за категоріями', 'Сумарний обсяг за видами будівель', `<span class="pill unit">МВт·год</span>`)}<div class="bars">${groups.map(g => `<div class="bar-row"><span class="bar-label">${esc(E.category(g.name))}</span><div class="bar-track">${g.amounts.map((v, i) => `<span class="bar-segment" style="background:${colors[i]};width:${v / biggest * 100}%" title="${E.energyNames[i]}: ${fmt(v)} МВт·год"></span>`).join('')}</div><span class="bar-value">${fmt(g.total, 0)}</span></div>`).join('')}</div><div class="legend chart-foot">${leg}</div></article>
  <article class="panel">${pane('Структура споживання', 'Частка кожного енергоносія')}<div class="share-body"><div class="ring" style="background:${s.total ? `conic-gradient(${gradient})` : '#eaf0eb'}"><div class="ring-hole"><b>${s.total ? '100%' : '—'}</b><small>разом</small></div></div><div class="share-list">${E.energyNames.map((name, i) => `<div><span class="key-label"><i class="swatch" style="background:${colors[i]}"></i>${name}</span><strong>${s.counts[i] ? fmt(shares[i], 1) + '%' : '—'}</strong></div>`).join('')}</div></div></article></section>
  <section class="panel section-gap scroll-me" id="ranking">${pane('Рейтинг будівель', full ? 'За питомим споживанням у межах однієї категорії' : 'Дані неповного року доступні в паспортах будівель', `<button class="btn secondary" id="rankCSV">${ico('download')}CSV</button>`)}<div class="filterline"><select id="category" aria-label="Категорія будівель">${groups.map(g => opt(g.name, E.category(g.name), cat)).join('')}</select><label class="search">${ico('search')}<input id="query" aria-label="Пошук будівлі" placeholder="Пошук за назвою або адресою" value="${esc(query)}"></label><label><input type="checkbox" id="invalid" ${showInvalid ? 'checked' : ''}> Поза рейтингом</label></div><div id="rankrows"></div></section>
- <details class="panel details"><summary>Базовий рівень СЕнМ за 2025 рік · зведення та експорт</summary><div class="extras" id="baseline"></div></details>${methodology()}`;
+ <details class="panel details"><summary>Базовий рівень СЕнМ за 2025 рік · зведення та експорт</summary><div class="extras" id="baseline"></div></details>${methodology()}`);
 
         // Внутрішня функція фільтрації, пагінації та відображення таблиці рейтингу будівель
         const rank = () => {
@@ -160,46 +158,46 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
             const n = Math.max(1, Math.ceil(indexed.length / 10));
             page = Math.max(1, Math.min(n, page));
             const display = indexed.slice((page - 1) * 10, page * 10);
-            document.querySelector('#rankrows').innerHTML = (display.length ? table(['Місце', 'Будівля', showInvalid ? 'Причина' : 'кВт·год/м²', 'Медіана групи', 'Клас'], display.map(({ r, i }) => `<tr><td class="rank">${showInvalid ? '—' : i}</td><td class="row-name"><button data-pass="${esc(r.b.id)}">${esc(r.b.name)}</button></td><td>${showInvalid ? esc(r.excludes.join(' · ')) : fmt(r.intensity)}</td><td>${fmt(r.median)}</td><td>${grade(r.grade)}</td></tr>`).join('')) : `<p class="empty">${full ? 'За цим фільтром будівель немає.' : 'Для рейтингу оберіть повний рік. Увімкніть «Поза рейтингом», щоб переглянути будівлі.'}</p>`) + `<div class="table-end"><span class="cell-meta">${indexed.length} будівель · сторінка ${page} із ${n}</span><div class="section-actions"><button class="btn" id="prev" ${page === 1 ? 'disabled' : ''}>Назад</button><button class="btn" id="next" ${page === n ? 'disabled' : ''}>Далі</button></div></div>`;
-            document.querySelector('#prev').onclick = () => {
+            $('#rankrows').html((display.length ? table(['Місце', 'Будівля', showInvalid ? 'Причина' : 'кВт·год/м²', 'Медіана групи', 'Клас'], display.map(({ r, i }) => `<tr><td class="rank">${showInvalid ? '—' : i}</td><td class="row-name"><button data-pass="${esc(r.b.id)}">${esc(r.b.name)}</button></td><td>${showInvalid ? esc(r.excludes.join(' · ')) : fmt(r.intensity)}</td><td>${fmt(r.median)}</td><td>${grade(r.grade)}</td></tr>`).join('')) : `<p class="empty">${full ? 'За цим фільтром будівель немає.' : 'Для рейтингу оберіть повний рік. Увімкніть «Поза рейтингом», щоб переглянути будівлі.'}</p>`) + `<div class="table-end"><span class="cell-meta">${indexed.length} будівель · сторінка ${page} із ${n}</span><div class="section-actions"><button class="btn" id="prev" ${page === 1 ? 'disabled' : ''}>Назад</button><button class="btn" id="next" ${page === n ? 'disabled' : ''}>Далі</button></div></div>`);
+            $('#prev').on('click', () => {
                 page--;
                 rank();
-            };
-            document.querySelector('#next').onclick = () => {
+            });
+            $('#next').on('click', () => {
                 page++;
                 rank();
-            };
-            document.querySelector('#rankCSV').onclick = () => csv(`Рейтинг-${year}.csv`, [['Місце', 'Будівля', 'Категорія', 'кВт·год/м²', 'Медіана', 'Клас', 'Причина виключення'], ...indexed.map(({ r, i }) => [showInvalid ? '' : i, r.b.name, r.b.category, r.intensity, r.median, r.grade, r.excludes.join(' · ')])]);
+            });
+            $('#rankCSV').on('click', () => csv(`Рейтинг-${year}.csv`, [['Місце', 'Будівля', 'Категорія', 'кВт·год/м²', 'Медіана', 'Клас', 'Причина виключення'], ...indexed.map(({ r, i }) => [showInvalid ? '' : i, r.b.name, r.b.category, r.intensity, r.median, r.grade, r.excludes.join(' · ')])]));
         };
         rank();
-        document.querySelector('#year').onchange = e => {
-            year = e.target.value;
+        $('#year').on('change', function () {
+            year = $(this).val();
             page = 1;
             render();
-        };
-        document.querySelector('#category').onchange = e => {
-            cat = e.target.value;
+        });
+        $('#category').on('change', function () {
+            cat = $(this).val();
             page = 1;
             rank();
-        };
-        document.querySelector('#query').oninput = e => {
-            query = e.target.value;
+        });
+        $('#query').on('input', function () {
+            query = $(this).val();
             page = 1;
             rank();
-        };
-        document.querySelector('#invalid').onchange = e => {
-            showInvalid = e.target.checked;
+        });
+        $('#invalid').on('change', function () {
+            showInvalid = $(this).prop('checked');
             page = 1;
             rank();
-        };
+        });
         drawBase();
     }
 
     // Побудова зведеної таблиці базового рівня СЕнМ за 2025 рік у розрізі суб'єктів громади та її експорт у CSV
     function drawBase() {
-        const host = document.querySelector('#baseline'), rows = E.analyze(data, '2025', gas);
+        const $host = $('#baseline'), rows = E.analyze(data, '2025', gas);
         if (!data.periods['2025']) {
-            host.innerHTML = '<p class="empty">Завантажте річний звіт за 2025 рік.</p>';
+            $host.html('<p class="empty">Завантажте річний звіт за 2025 рік.</p>');
             return;
         }
         const groups = grouped(rows, r => data.links?.[r.b.id] || '');
@@ -209,8 +207,8 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
             return [group, `${s.covered}/${rs.length}`, ...s.amounts.map((v, i) => s.counts[i] ? v : null), s.total, s.total === null ? null : s.total * .086];
         });
         const cols = ['Рівень', 'Покриття', 'Тепло, МВт·год', 'Електрика, МВт·год', 'Газ, МВт·год', 'Усього, МВт·год', 'т н. е.'];
-        host.innerHTML = table(cols, values.map(line => `<tr>${line.map(v => `<td>${typeof v === 'string' ? esc(v) : fmt(v)}</td>`).join('')}</tr>`).join('')) + `<button class="btn secondary extras" id="baseCSV">${ico('download')}Завантажити зведення і будівлі</button>`;
-        document.querySelector('#baseCSV').onclick = () => csv('Базовий-рівень-2025.csv', [cols, ...values, ...rows.map(r => [r.b.name, `${r.total !== null ? 1 : 0}/1`, ...r.converted, r.total, r.total === null ? null : r.total * .086])]);
+        $host.html(table(cols, values.map(line => `<tr>${line.map(v => `<td>${typeof v === 'string' ? esc(v) : fmt(v)}</td>`).join('')}</tr>`).join('')) + `<button class="btn secondary extras" id="baseCSV">${ico('download')}Завантажити зведення і будівлі</button>`);
+        $('#baseCSV').on('click', () => csv('Базовий-рівень-2025.csv', [cols, ...values, ...rows.map(r => [r.b.name, `${r.total !== null ? 1 : 0}/1`, ...r.converted, r.total, r.total === null ? null : r.total * .086])]));
     }
 
     // Рендеринг сторінки детального енергетичного паспорта обраної будівлі з можливістю друку
@@ -218,26 +216,28 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
         const sel = new URLSearchParams(location.hash.split('?')[1] || '').get('id') || passportId;
         const list = [...data.buildings].sort((a, b) => a.name.localeCompare(b.name, 'uk'));
         if (!list.length) {
-            main.innerHTML = header('Паспорт будівлі', 'Завантажте реєстр будівель.') + '<a class="btn primary" href="#import">Імпорт XLSX</a>';
+            $main.html(header('Паспорт будівлі', 'Завантажте реєстр будівель.') + '<a class="btn primary" href="#import">Імпорт XLSX</a>');
             return;
         }
         const baseRows = E.analyze(data, '2025', gas), b = list.find(x => x.id === sel) || baseRows.find(r => r.eligible && r.grade)?.b || list[0];
         passportId = b.id;
         const base = baseRows.find(r => r.b.id === b.id), years = Object.keys(data.periods).sort();
         const facts = [['Категорія', b.category], ['Адреса', b.address], ['Рік забудови', b.year], ['Поверховість', b.floors], ['Опалювана площа', E.finite(b.area) ? fmt(b.area) + ' м²' : ''], ['Опалюваний об’єм', E.finite(b.volume) ? fmt(b.volume) + ' м³' : ''], ['Опалення', b.heating], ['Суб’єкт СЕнМ', data.subjects?.[data.links?.[b.id]]]];
-        main.innerHTML = header('Паспорт будівлі', b.name, `<button class="btn secondary" id="print">${ico('download')}Друк / PDF</button>`) + `<div class="toolbar no-print"><label class="field wide-select">Будівля<select id="pick">${list.map(x => opt(x.id, x.name, b.id)).join('')}</select></label></div><section class="stats">${stat('Базовий рівень · 2025', fmt(base.total), 'МВт·год', `${fmt(base.total === null ? null : base.total * .086)} т н. е. за наявними значеннями`, 'bolt')}${stat('Питоме споживання', fmt(base.intensity), 'кВт·год/м²', `${fmt(base.byVolume)} кВт·год/м³ опалюваного об’єму`, 'build')}${stat('Умовний клас', base.grade || '—', '', `Медіана групи: ${fmt(base.median)} кВт·год/м²`, 'leaf')}</section>
+        $main.html(header('Паспорт будівлі', b.name, `<button class="btn secondary" id="print">${ico('download')}Друк / PDF</button>`) + `<div class="toolbar no-print"><label class="field wide-select">Будівля<select id="pick">${list.map(x => opt(x.id, x.name, b.id)).join('')}</select></label></div><section class="stats">${stat('Базовий рівень · 2025', fmt(base.total), 'МВт·год', `${fmt(base.total === null ? null : base.total * .086)} т н. е. за наявними значеннями`, 'bolt')}${stat('Питоме споживання', fmt(base.intensity), 'кВт·год/м²', `${fmt(base.byVolume)} кВт·год/м³ опалюваного об’єму`, 'build')}${stat('Умовний клас', base.grade || '—', '', `Медіана групи: ${fmt(base.median)} кВт·год/м²`, 'leaf')}</section>
  <section class="panel">${pane('Характеристики будівлі', 'За реєстром uMuni')}<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || 'Немає даних')}</dd></div>`).join('')}</dl><p class="footnote">Лічильники: ${esc(Object.entries(b.meters || {}).map(([k, n]) => `${k} — ${n}`).join(' · ') || 'даних немає')}.</p></section>
  <section class="panel">${pane('Показники споживання', 'Значення у вихідних одиницях. Тире означає пропуск.')} ${table(['Ресурс', 'Одиниця', ...years.map(displayYear)], E.resources.map((n, i) => `<tr><td>${n}</td><td>${E.units[i]}</td>${years.map(y => `<td>${fmt(b.years[y]?.[i], 2)}</td>`).join('')}</tr>`).join(''))}</section>
- <section class="panel">${pane('Порівняння з аналогами', 'Базовий 2025 рік')}<p>${base.eligible && base.median > 0 ? `Споживання будівлі — <strong>${fmt(base.intensity)} кВт·год/м²</strong>. Медіана категорії — <strong>${fmt(base.median)} кВт·год/м²</strong> (${base.peerCount} будівель). Відхилення — ${fmt((base.intensity / base.median - 1) * 100)}%.` : esc(base.excludes.join(' · ') || 'Недостатньо даних для порівняння.')}</p><p class="footnote">Аналітична оцінка. Не є енергетичним сертифікатом.${!base.grade && base.eligible ? ' Для класу потрібні щонайменше п’ять будівель та додатна медіана.' : ''}</p></section>${methodology()}`;
-        document.querySelector('#pick').onchange = e => location.hash = 'passport?id=' + encodeURIComponent(e.target.value);
-        document.querySelector('#print').onclick = () => window.print();
+ <section class="panel">${pane('Порівняння з аналогами', 'Базовий 2025 рік')}<p>${base.eligible && base.median > 0 ? `Споживання будівлі — <strong>${fmt(base.intensity)} кВт·год/м²</strong>. Медіана категорії — <strong>${fmt(base.median)} кВт·год/м²</strong> (${base.peerCount} будівель). Відхилення — ${fmt((base.intensity / base.median - 1) * 100)}%.` : esc(base.excludes.join(' · ') || 'Недостатньо даних для порівняння.')}</p><p class="footnote">Аналітична оцінка. Не є енергетичним сертифікатом.${!base.grade && base.eligible ? ' Для класу потрібні щонайменше п’ять будівель та додатна медіана.' : ''}</p></section>${methodology()}`);
+        $('#pick').on('change', function () {
+            location.hash = 'passport?id=' + encodeURIComponent($(this).val());
+        });
+        $('#print').on('click', () => window.print());
     }
 
     // Рендеринг сторінки імпорту файлів XLSX/CSV, контролю якості даних та налаштувань
     function importPage() {
         const ids = Object.keys(data.subjects || {}), builds = [...data.buildings].sort((a, b) => a.name.localeCompare(b.name, 'uk'));
         const options = (current) => builds.map(b => opt(b.id, b.name, current)).join('');
-        main.innerHTML = header('Імпорт даних', 'Оригінальні файли Excel обробляються у вашому браузері.') + `<div class="columns import-columns">
+        $main.html(header('Імпорт даних', 'Оригінальні файли Excel обробляються у вашому браузері.') + `<div class="columns import-columns">
  <section class="panel import-guide"><h2>1. Завантажте файли з Google Диска</h2>
  <p>Відкрийте папку <a href="https://drive.google.com/drive/search?q=Трек%202%20Енергетиний%20менеджмент" target="_blank" rel="noopener noreferrer">«Трек 2 Енергетиний менеджмент»</a> через пошук у вашому Google Диску. Завантажте файли у форматі XLSX. Якщо Диск створить ZIP, спершу розпакуйте його.</p>
  <h3>Для першої перевірки — два файли</h3>
@@ -260,35 +260,33 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
  <section class="panel section-gap">${pane('Якість даних', 'Пропуски, непридатна площа та розбіжності між лічильниками й споживанням.')}<button class="btn secondary" id="defects">${ico('download')}Завантажити data-defects.csv</button></section>
  <section class="panel">${pane('Зв’язки із суб’єктами СЕнМ', ids.length ? `${ids.length} суб’єктів у довіднику. Підтвердьте зв’язок для зведення.` : 'Завантажте файл D2-05, щоб прив’язати будівлю до суб’єкта.')} ${ids.length ? `<div class="form-grid"><label class="field">Будівля<select id="linkBuilding">${options('')}</select></label><label class="field">Суб’єкт<select id="linkSubject"></select></label><button class="btn primary" id="saveLink">Зберегти зв’язок</button></div>` : ''}</section>
  ${(data.pending || []).length ? `<section class="panel">${pane('Зіставлення будівель', `${data.pending.length} рядків потребують рішення.`)}<label class="field">Рядок звіту<select id="pendingRow">${data.pending.map((v, i) => opt(i, `${v.year} · ${v.name} · ${v.address}`, '')).join('')}</select></label><div class="form-grid extras"><label class="field">Будівля реєстру<select id="pendingBuilding"><option value="">Оберіть будівлю</option>${options('')}</select></label><button id="resolve" class="btn primary">Підтвердити збіг</button></div></section>` : ''}
- <section class="panel">${pane('Теплота згоряння газу', 'Коефіцієнт застосовується до всіх завантажених років.')}<div class="fields"><label class="field">кВт·год/м³<input id="gas" type="number" min="0.01" max="25" step="any" value="${gas}"></label><button id="saveGas" class="btn secondary">Перерахувати</button></div></section>${methodology()}`;
-        const queued = new Map(), filesInput = document.querySelector('#files'), queueBox = document.querySelector('#fileQueue');
+ <section class="panel">${pane('Теплота згоряння газу', 'Коефіцієнт застосовується до всіх завантажених років.')}<div class="fields"><label class="field">кВт·год/м³<input id="gas" type="number" min="0.01" max="25" step="any" value="${gas}"></label><button id="saveGas" class="btn secondary">Перерахувати</button></div></section>${methodology()}`);
+        const queued = new Map(), $filesInput = $('#files'), $queueBox = $('#fileQueue');
 
         // Відображення списку обраних користувачем XLSX-файлів у черзі на імпорт
         function showQueue() {
-            queueBox.innerHTML = queued.size ? '<p>Обрано файлів: ' + queued.size + '</p><ul>' + Array.from(queued.keys(), name => '<li>' + esc(name) + ' <button type="button" data-remove-file="' + esc(name) + '" aria-label="Вилучити ' + esc(name) + '">Вилучити</button></li>').join('') + '</ul>' : '';
+            $queueBox.html(queued.size ? '<p>Обрано файлів: ' + queued.size + '</p><ul>' + Array.from(queued.keys(), name => '<li>' + esc(name) + ' <button type="button" data-remove-file="' + esc(name) + '" aria-label="Вилучити ' + esc(name) + '">Вилучити</button></li>').join('') + '</ul>' : '');
         }
 
-        filesInput.onchange = () => {
-            for (const file of filesInput.files) queued.set(file.name, file);
-            filesInput.value = '';
+        $filesInput.on('change', function () {
+            for (const file of this.files) queued.set(file.name, file);
+            $(this).val('');
             showQueue();
-        };
-        queueBox.onclick = e => {
-            const button = e.target.closest('[data-remove-file]');
-            if (button) {
-                queued.delete(button.dataset.removeFile);
-                showQueue();
-            }
-        };
-        document.querySelector('#importFiles').onclick = async e => {
+        });
+        $queueBox.on('click', '[data-remove-file]', function () {
+            queued.delete($(this).attr('data-remove-file'));
+            showQueue();
+        });
+        $('#importFiles').on('click', async function () {
             if (!queued.size) {
                 notify('Спершу оберіть XLSX-файли.');
                 return;
             }
-            const btn = e.currentTarget;
-            btn.disabled = filesInput.disabled = true;
-            queueBox.inert = true;
-            btn.textContent = 'Обробка…';
+            const $btn = $(this);
+            $btn.prop('disabled', true);
+            $filesInput.prop('disabled', true);
+            $queueBox.prop('inert', true);
+            $btn.text('Обробка…');
             try {
                 const result = await EnergyImport.readFiles([...queued.values()], data);
                 data = result.state;
@@ -301,29 +299,30 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
                 render();
                 notify('Імпорт завершено');
             } catch (err) {
-                document.querySelector('#messages').textContent = err.message;
-                btn.disabled = filesInput.disabled = false;
-                queueBox.inert = false;
-                btn.textContent = 'Опрацювати файли';
+                $('#messages').text(err.message);
+                $btn.prop('disabled', false);
+                $filesInput.prop('disabled', false);
+                $queueBox.prop('inert', false);
+                $btn.text('Опрацювати файли');
             }
-        };
-        document.querySelector('#importJournal').onclick = async e => {
-            const file = document.querySelector('#journalFile').files[0], message = document.querySelector('#journalMessage');
+        });
+        $('#importJournal').on('click', async function () {
+            const file = $('#journalFile')[0].files[0], $message = $('#journalMessage');
             if (!file) {
-                message.textContent = 'Оберіть журнал у форматі CSV.';
+                $message.text('Оберіть журнал у форматі CSV.');
                 return;
             }
-            const button = e.currentTarget;
-            button.disabled = true;
+            const $button = $(this);
+            $button.prop('disabled', true);
             try {
                 const added = window.PublicationData.importJournal(await file.text(), data);
-                message.textContent = 'Додано показань: ' + added + '. Перегляньте таблицю у розділі «Відкриті дані».';
+                $message.text('Додано показань: ' + added + '. Перегляньте таблицю у розділі «Відкриті дані».');
             } catch (err) {
-                message.textContent = err.message;
+                $message.text(err.message);
             } finally {
-                button.disabled = false;
+                $button.prop('disabled', false);
             }
-        };
+        });
         const defects = [];
         for (const y of Object.keys(data.periods)) {
             for (const r of E.analyze(data, y, gas)) {
@@ -335,10 +334,10 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
             }
         }
         for (const p of data.pending || []) defects.push([p.year, '', p.name, 'Не підтверджено відповідність будівлі', p.address, p.source?.file, p.source?.row]);
-        const defectButton = document.querySelector('#defects');
-        defectButton.insertAdjacentHTML('beforebegin', '<details class="details"><summary>Переглянути зауваження (' + defects.length + ')</summary>' + table(['Рік', 'Будівля', 'Правило'], defects.slice(0, 8).map(d => '<tr><td>' + esc(d[0]) + '</td><td>' + esc(d[2]) + '</td><td>' + esc(d[3]) + '</td></tr>').join('')) + '<p class="footnote">Перші ' + Math.min(defects.length, 8) + ' записів. Повний перелік доступний у CSV.</p></details>');
-        defectButton.onclick = () => csv('data-defects.csv', [['Рік', 'ID будівлі', 'Будівля', 'Поле / правило', 'Вихідне значення', 'Файл', 'Рядок у XLSX'], ...defects]);
-        document.querySelector('#clear-data').onclick = () => {
+        const $defectButton = $('#defects');
+        $defectButton.before('<details class="details"><summary>Переглянути зауваження (' + defects.length + ')</summary>' + table(['Рік', 'Будівля', 'Правило'], defects.slice(0, 8).map(d => '<tr><td>' + esc(d[0]) + '</td><td>' + esc(d[2]) + '</td><td>' + esc(d[3]) + '</td></tr>').join('')) + '<p class="footnote">Перші ' + Math.min(defects.length, 8) + ' записів. Повний перелік доступний у CSV.</p></details>');
+        $defectButton.on('click', () => csv('data-defects.csv', [['Рік', 'ID будівлі', 'Будівля', 'Поле / правило', 'Вихідне значення', 'Файл', 'Рядок у XLSX'], ...defects]));
+        $('#clear-data').on('click', () => {
             if (!window.confirm('Очистити імпортовані звіти, показання, довідники та налаштування у цьому браузері?')) return;
             try {
                 window.EnergyStorage.clear();
@@ -347,9 +346,9 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
                 return;
             }
             location.reload();
-        };
-        document.querySelector('#saveGas').onclick = () => {
-            const el = document.querySelector('#gas'), v = el.valueAsNumber;
+        });
+        $('#saveGas').on('click', () => {
+            const el = $('#gas')[0], v = el.valueAsNumber;
             if (!el.checkValidity() || !E.finite(v) || v <= 0) {
                 el.reportValidity();
                 return;
@@ -361,58 +360,57 @@ ${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
             }
             render();
             notify('Коефіцієнт оновлено');
-        };
+        });
         if (ids.length) {
-            const b = document.querySelector('#linkBuilding'), s = document.querySelector('#linkSubject');
-            const refresh = () => s.innerHTML = opt('', 'Не визначений', data.links?.[b.value]) + ids.map(id => opt(id, `${data.subjects[id]} · ${id}`, data.links?.[b.value])).join('');
+            const $b = $('#linkBuilding'), $s = $('#linkSubject');
+            const refresh = () => $s.html(opt('', 'Не визначений', data.links?.[$b.val()]) + ids.map(id => opt(id, `${data.subjects[id]} · ${id}`, data.links?.[$b.val()])).join(''));
             refresh();
-            b.onchange = refresh;
-            document.querySelector('#saveLink').onclick = () => {
-                data.links[b.value] = s.value;
+            $b.on('change', refresh);
+            $('#saveLink').on('click', () => {
+                data.links[$b.val()] = $s.val();
                 save();
                 notify('Зв’язок оновлено');
-            };
+            });
         }
-        const resolve = document.querySelector('#resolve');
-        if (resolve) resolve.onclick = () => {
-            const id = document.querySelector('#pendingBuilding').value;
+        const $resolve = $('#resolve');
+        if ($resolve.length) $resolve.on('click', () => {
+            const id = $('#pendingBuilding').val();
             if (!id) {
                 notify('Оберіть будівлю');
                 return;
             }
             try {
-                data = EnergyImport.resolve(data, +document.querySelector('#pendingRow').value, id);
+                data = EnergyImport.resolve(data, +$('#pendingRow').val(), id);
                 save();
                 render();
                 notify('Зіставлення збережене');
             } catch (err) {
                 notify(err.message);
             }
-        };
+        });
     }
 
     // Головний маршрутизатор: оновлення активного пункту навігації та відображення відповідної сторінки за URL-хешем
     function render() {
         const pageName = (location.hash.slice(1).split('?')[0] || 'overview');
-        document.querySelectorAll('nav a').forEach(a => {
-            if (a.hash === '#' + pageName) a.setAttribute('aria-current', 'page');
-            else a.removeAttribute('aria-current');
+        $('nav a').each(function () {
+            if (this.hash === '#' + pageName) $(this).attr('aria-current', 'page');
+            else $(this).removeAttr('aria-current');
         });
         if (pageName === 'passport') passport();
         else if (pageName === 'import') importPage();
         else if (pageName === 'publication') {
-            main.innerHTML = header('Відкриті дані', 'Перевірка показань для оновлення resources.csv на data.gov.ua.') + '<div id="publication"></div>';
-            window.renderPublication(document.querySelector('#publication'), data, { esc, download, notify });
+            $main.html(header('Відкриті дані', 'Перевірка показань для оновлення resources.csv на data.gov.ua.') + '<div id="publication"></div>');
+            window.renderPublication($('#publication')[0], data, { esc, download, notify });
         } else overview();
     }
 
-    main.addEventListener('click', e => {
-        const b = e.target.closest('[data-pass]');
-        if (b) location.hash = 'passport?id=' + encodeURIComponent(b.dataset.pass);
+    $main.on('click', '[data-pass]', function () {
+        location.hash = 'passport?id=' + encodeURIComponent($(this).attr('data-pass'));
     });
-    window.addEventListener('hashchange', () => {
+    $(window).on('hashchange', () => {
         render();
         window.scrollTo(0, 0);
     });
     render();
-})();
+});
