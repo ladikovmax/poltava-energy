@@ -7,6 +7,7 @@ window.App = window.App || {};
     // Тепло: ~3 980 грн/Гкал (~3 422 грн/МВт·год), е/е: 14,77 грн/кВт·год, газ: 20,88 грн/м³ (~2 245 грн/мВт·год)
     const TARIFF_UAH_PER_MWH = [3422, 14770, 2245];
     const ENERGY_NAMES = ['Теплова енергія', 'Електроенергія', 'Природний газ'];
+    const MIN_DAYS_FOR_GRADE = 30; // Мінімум 1 місяць даних для оцінки ефективності
 
     const finite = v => typeof v === 'number' && Number.isFinite(v);
 
@@ -15,6 +16,66 @@ window.App = window.App || {};
         if (!Array.isArray(amounts)) return null;
         const totalUah = amounts.reduce((sum, mwh, i) => sum + (mwh || 0) * (TARIFF_UAH_PER_MWH[i] || 0), 0);
         return totalUah > 0 ? totalUah / 1e6 : null;
+    }
+
+    // Визначення тривалості звітного періоду (повний рік / кількість днів до дати зрізу)
+    function getPeriodMeta(year, period) {
+        if (period?.full) {
+            return { full: true, isPartial: false, days: 365, enoughForGrade: true };
+        }
+        const raw = String(period?.asOf || '').trim();
+        let y = Number(year);
+        let m = 0;
+        let d = 0;
+
+        const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        const ua = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+
+        if (iso) {
+            y = Number(iso[1]);
+            m = Number(iso[2]);
+            d = Number(iso[3]);
+        } else if (ua) {
+            d = Number(ua[1]);
+            m = Number(ua[2]);
+            y = Number(ua[3]);
+        }
+
+        if (!m || !d || !Number.isFinite(y)) {
+            return { full: false, isPartial: true, days: 0, enoughForGrade: false };
+        }
+
+        const start = Date.UTC(y, 0, 1);
+        const end = Date.UTC(y, m - 1, d);
+        const days = Math.max(0, Math.floor((end - start) / 86400000) + 1);
+
+        return {
+            full: false,
+            isPartial: true,
+            days,
+            enoughForGrade: days >= MIN_DAYS_FOR_GRADE
+        };
+    }
+
+    function calcMedian(values) {
+        const sorted = values.filter(finite).sort((a, b) => a - b);
+        if (!sorted.length) return null;
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0
+            ? sorted[mid]
+            : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    function calcGrade(intensity, median) {
+        if (!finite(intensity) || !finite(median) || median <= 0) return null;
+        const ratio = intensity / median;
+        if (ratio <= 0.50) return 'A';
+        if (ratio <= 0.70) return 'B';
+        if (ratio <= 0.90) return 'C';
+        if (ratio <= 1.10) return 'D';
+        if (ratio <= 1.30) return 'E';
+        if (ratio <= 1.50) return 'F';
+        return 'G';
     }
 
     // Агрегація списку будівель
@@ -60,14 +121,17 @@ window.App = window.App || {};
 
         const year = years.includes(selectedYear) ? selectedYear : (years.includes('2025') ? '2025' : years[0]);
         const period = state.periods[year] || { full: false, asOf: '' };
-        const full = !!period.full;
+        const periodMeta = getPeriodMeta(year, period);
+        const full = periodMeta.full;
+
         const gasFactor = (finite(gasKwh) && gasKwh > 0 ? gasKwh : 9.3) / 1000;
         const factors = [1.163, 0.001, gasFactor];
 
         const baseAnalysis = A.passportCore.analyzeAll();
         const baseMap = new Map(baseAnalysis.items.map(x => [x.b.id, x]));
 
-        const rows = state.buildings.map(b => {
+        // 1. Первинний розрахунок споживання та питомого показника кожної будівлі
+        const draftRows = state.buildings.map(b => {
             const baseItem = baseMap.get(b.id);
             const category = baseItem ? baseItem.category : (b.category || 'Інші комунальні будівлі');
             const raw = b.years?.[year] || [];
@@ -91,29 +155,73 @@ window.App = window.App || {};
             if (!areaValid) excludes.push('Фіктивна або відсутня площа (≤ 1,00 м²)');
             if (!hasData) excludes.push(`Немає споживання у ${year} р.`);
 
-            // Питоме споживання рахуємо для всіх будівель із даними за обраний рік і коректною площею
             const eligible = hasData && areaValid;
             const intensity = eligible ? (totalMwh * 1000) / b.area : null;
 
             return {
                 b,
+                baseItem,
                 category,
                 mwh: totalMwh,
                 hasData,
                 byResource,
                 eligible,
                 excludes,
-                intensity,
-                // Порівняння з еталонною річною медіаною та класи A–G — лише для повного звітного року
-                median: full && baseItem ? baseItem.median : null,
-                grade: full && baseItem?.gradeInfo ? baseItem.gradeInfo.grade : null
+                intensity
             };
         });
 
-        // Лише будівлі, які мають фактичне споживання у вибраному році
+        // 2. Розрахунок медіан категорій для неповного року (якщо зібрано >= 1 місяця даних)
+        const partialMedians = new Map();
+        if (!full && periodMeta.enoughForGrade) {
+            const byCat = new Map();
+            for (const r of draftRows) {
+                if (!r.eligible || !finite(r.intensity)) continue;
+                if (!byCat.has(r.category)) byCat.set(r.category, []);
+                byCat.get(r.category).push(r.intensity);
+            }
+            for (const [cat, vals] of byCat.entries()) {
+                partialMedians.set(cat, calcMedian(vals));
+            }
+        }
+
+        // 3. Присвоєння медіани та класу ефективності (A–G)
+        const rows = draftRows.map(r => {
+            let median = null;
+            let grade = null;
+            let isPartialGrade = false;
+
+            if (full) {
+                median = r.baseItem ? r.baseItem.median : null;
+                grade = r.eligible
+                    ? (r.baseItem?.gradeInfo ? r.baseItem.gradeInfo.grade : calcGrade(r.intensity, median))
+                    : null;
+            } else if (periodMeta.enoughForGrade) {
+                median = partialMedians.get(r.category) ?? null;
+                if (median === null && r.baseItem?.median) {
+                    median = r.baseItem.median * (periodMeta.days / 365);
+                }
+                grade = r.eligible ? calcGrade(r.intensity, median) : null;
+                isPartialGrade = grade !== null;
+            }
+
+            return {
+                b: r.b,
+                category: r.category,
+                mwh: r.mwh,
+                hasData: r.hasData,
+                byResource: r.byResource,
+                eligible: r.eligible,
+                excludes: r.excludes,
+                intensity: r.intensity,
+                median,
+                grade,
+                isPartialGrade
+            };
+        });
+
         const activeRows = rows.filter(r => r.hasData);
 
-        // Групування за категоріями
         const catMap = new Map();
         for (const r of rows) {
             if (!catMap.has(r.category)) catMap.set(r.category, []);
@@ -130,6 +238,7 @@ window.App = window.App || {};
             year,
             years,
             period,
+            periodMeta,
             full,
             rows,
             activeRows,

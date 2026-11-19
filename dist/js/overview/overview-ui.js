@@ -20,6 +20,8 @@ window.App = window.App || {};
         G: 'Клас G · Критичні перевитрати або похибка площі / вузла обліку'
     };
 
+    const CLOCK_ICON = `<svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="4.5"/><path d="M6 3.5v2.7l1.8 1.1"/></svg>`;
+
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmt = (v, p = 1) => (typeof v === 'number' && Number.isFinite(v))
         ? new Intl.NumberFormat('uk-UA', { maximumFractionDigits: p }).format(v)
@@ -34,7 +36,6 @@ window.App = window.App || {};
         showInvalid: false
     };
 
-    // Розрахунок параметрів дуг для SVG-кільця
     function calcRingArcs(shares) {
         const activeCount = shares.filter(p => p > 0.2).length;
         const gap = activeCount > 1 ? 3 : 0;
@@ -75,7 +76,8 @@ window.App = window.App || {};
         }
 
         uiState.year = data.year;
-        const { rows, activeRows, summary: s, groups, full, years, period } = data;
+        const { rows, activeRows, summary: s, groups, full, periodMeta, years, period } = data;
+        const canGrade = periodMeta.enoughForGrade;
 
         const defaultCat = groups.find(g => /навчальн|школ/i.test(g.name))?.name || groups[0]?.name || '';
         if (!groups.some(g => g.name === uiState.donutCat)) {
@@ -94,6 +96,12 @@ window.App = window.App || {};
         const legendHtml = data.energyNames
             .map((v, i) => `<span class="key-label"><i class="swatch" style="background:${COLORS[i]}"></i>${esc(v)}</span>`)
             .join('');
+
+        const rankSubtitle = full
+            ? 'Порівняння питомого споживання з медіаною своєї категорії за повний звітний рік'
+            : (canGrade
+                ? `Попередня оцінка за неповний ${data.year} рік (до ${esc(period.asOf)}) · позначка <span class="inline-partial-badge">${CLOCK_ICON}</span> означає неповний рік`
+                : `Даних за ${data.year} рік менше 1 місяця (до ${esc(period.asOf)}) · оцінка класу A–G прихована`);
 
         $main.html(`
             <div class="page-head">
@@ -239,9 +247,7 @@ window.App = window.App || {};
                 <div class="panel-head">
                     <div>
                         <h2>Рейтинг енергоефективності будівель (${data.year} рік)</h2>
-                        <p>${full
-                            ? 'Порівняння питомого споживання з медіаною своєї категорії за повний звітний рік'
-                            : `Питоме споживання за неповний ${data.year} рік (до ${esc(period.asOf)}) · без оцінки класу A–G`}</p>
+                        <p>${rankSubtitle}</p>
                     </div>
                     <div class="actions">
                         <span class="pill median-pill" id="ov-median-badge">Медіана групи: —</span>
@@ -310,7 +316,6 @@ window.App = window.App || {};
             </details>
         `);
 
-        // Оновлення анімованого SVG-круга (показує обрану категорію uiState.donutCat за вибраний рік)
         function updateCategoryDonut(animateEntrance = true) {
             const g = groups.find(item => item.name === uiState.donutCat) || groups[0];
             if (!g) return;
@@ -336,7 +341,7 @@ window.App = window.App || {};
             $('#ov-ring-total').text(g.total !== null ? fmt(g.total, 0) : '0');
             $('#ov-ring-share').text(s.total ? `${fmt(shareOfComm, 1)}% громади` : 'немає даних');
 
-            const catMedian = full ? rows.find(r => r.category === g.name && r.median !== null)?.median : null;
+            const catMedian = canGrade ? rows.find(r => r.category === g.name && r.median !== null)?.median : null;
             const toeText = g.toe !== null ? `${fmt(g.toe, 1)} т н. е.` : 'немає даних';
             const medText = catMedian ? ` · медіана ${fmt(catMedian, 1)} кВт·год/м²` : '';
             $('#ov-drill-toe').text(toeText + medText);
@@ -365,7 +370,6 @@ window.App = window.App || {};
             );
         }
 
-        // Малювання таблиці рейтингу (виключно по спорудах із даними за вибраний рік)
         function drawRank() {
             const isAll = uiState.cat === ALL_CAT;
             const catRows = isAll ? activeRows : activeRows.filter(r => r.category === uiState.cat);
@@ -375,14 +379,15 @@ window.App = window.App || {};
             $('#ov-tab-valid').text(`У рейтингу (${validCount})`);
             $('#ov-tab-invalid').text(`Поза рейтингом (${invalidCount})`);
 
-            if (!full) {
-                $('#ov-median-badge').text(`Зріз до ${period.asOf}`);
+            if (!canGrade) {
+                $('#ov-median-badge').text(`Зріз до ${period.asOf} (< 1 міс.)`);
             } else if (isAll) {
-                $('#ov-median-badge').text('Медіана: за категорією будівлі');
+                $('#ov-median-badge').text(full ? 'Медіана: за категорією будівлі' : `Медіана: за категорією (до ${period.asOf})`);
             } else {
                 const sampleMedian = catRows.find(r => r.median !== null)?.median;
+                const medPrefix = full ? 'Медіана групи' : `Медіана (до ${period.asOf})`;
                 $('#ov-median-badge').html(
-                    sampleMedian ? `Медіана групи: <b>${fmt(sampleMedian, 1)}</b> кВт·год/м²` : 'Медіана групи: —'
+                    sampleMedian ? `${medPrefix}: <b>${fmt(sampleMedian, 1)}</b> кВт·год/м²` : `${medPrefix}: —`
                 );
             }
 
@@ -404,7 +409,7 @@ window.App = window.App || {};
             } else {
                 const head = uiState.showInvalid
                     ? '<th>№</th><th>Будівля та адреса</th><th>Причина виключення з рейтингу</th><th>Спожито, МВт·год</th>'
-                    : (full
+                    : (canGrade
                         ? '<th>Місце</th><th>Будівля та адреса</th><th>кВт·год/м²</th><th>Відхилення від медіани</th><th>Клас</th>'
                         : '<th>Місце</th><th>Будівля та адреса</th><th>кВт·год/м²</th><th>Спожито, МВт·год</th><th>Клас</th>');
 
@@ -423,14 +428,15 @@ window.App = window.App || {};
                         `;
                     }
 
-                    if (!full) {
+                    if (!canGrade) {
+                        const shortTip = `Оцінка класу прихована: у звіті менше 1 місяця даних (до ${period.asOf})`;
                         return `
                             <tr>
                                 <td class="rank">${i}</td>
                                 <td class="row-name"><button type="button" data-pass="${esc(r.b.id)}">${esc(r.b.name)}</button>${addr}</td>
                                 <td class="num-strong">${fmt(r.intensity, 1)}</td>
                                 <td>${fmt(r.mwh, 1)}</td>
-                                <td><span class="cell-meta" title="Клас ефективності визначається лише за повний календарний рік">—</span></td>
+                                <td><span class="cell-meta grade-tip" data-tip="${esc(shortTip)}" tabindex="0">—</span></td>
                             </tr>
                         `;
                     }
@@ -440,9 +446,17 @@ window.App = window.App || {};
                     const diffCls = diffPct === null ? '' : diffPct > 15 ? 'diff-bad' : diffPct < -10 ? 'diff-good' : 'diff-neutral';
                     const ratioWidth = r.median && r.intensity !== null ? Math.min(100, Math.round((r.intensity / (r.median * 2)) * 100)) : 0;
 
-                    const tip = r.grade ? (GRADE_TIPS[r.grade] || '') : '';
+                    const baseTip = r.grade ? (GRADE_TIPS[r.grade] || '') : '';
+                    const tip = r.isPartialGrade
+                        ? `${baseTip} · Попередня оцінка за неповний рік (зріз до ${period.asOf})`
+                        : baseTip;
+
+                    const partialBadge = r.isPartialGrade
+                        ? `<i class="grade-partial-mark" aria-hidden="true">${CLOCK_ICON}</i>`
+                        : '';
+
                     const gradeBadge = r.grade
-                        ? `<span class="grade ${r.grade.toLowerCase()} grade-tip" data-tip="${esc(tip)}" aria-label="${esc(tip)}" tabindex="0">${r.grade}</span>`
+                        ? `<span class="grade ${r.grade.toLowerCase()} ${r.isPartialGrade ? 'is-partial' : ''} grade-tip" data-tip="${esc(tip)}" aria-label="${esc(tip)}" tabindex="0">${r.grade}${partialBadge}</span>`
                         : '—';
 
                     return `
@@ -486,8 +500,19 @@ window.App = window.App || {};
             $('#ov-rank-csv').off('click').on('click', () => {
                 const catFile = isAll ? 'Всі-споруди' : uiState.cat;
                 Core.downloadCsv(`Рейтинг-${uiState.year}-${catFile}.csv`, [
-                    ['Місце', 'Будівля', 'Адреса', 'Категорія', 'Спожито, МВт·год', 'кВт·год/м²', 'Медіана групи', 'Клас', 'Причина виключення'],
-                    ...indexed.map(({ r, i }) => [uiState.showInvalid ? '' : i, r.b.name, r.b.address, r.category, r.mwh, r.intensity, r.median, r.grade, r.excludes.join(' · ')])
+                    ['Місце', 'Будівля', 'Адреса', 'Категорія', 'Спожито, МВт·год', 'кВт·год/м²', 'Медіана групи', 'Клас', 'Примітка періоду', 'Причина виключення'],
+                    ...indexed.map(({ r, i }) => [
+                        uiState.showInvalid ? '' : i,
+                        r.b.name,
+                        r.b.address,
+                        r.category,
+                        r.mwh,
+                        r.intensity,
+                        r.median,
+                        r.grade,
+                        r.isPartialGrade ? `Неповний рік (до ${period.asOf})` : (full ? 'Повний рік' : ''),
+                        r.excludes.join(' · ')
+                    ])
                 ]);
             });
         }
