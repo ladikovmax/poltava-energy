@@ -79,7 +79,16 @@
 
     // Рендеринг верхньої шапки сторінки із заголовком, описом та панеллю кнопок дій
     function header(title, desc, action = '') {
-        return `<div class="page-head"><div><div class="eyeline"><i></i>Полтавська міська громада</div><h1>${esc(title)}</h1>${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}</div><div class="actions no-print">${action}</div></div>`;
+        return `<div class="page-head">
+<div>
+<div class="eyeline">
+<i></i>Полтавська міська громада
+</div>
+<h1>${esc(title)}</h1>
+${desc ? `<p class="subtitle">${esc(desc)}</p>` : ''}
+</div>
+<div class="actions no-print">${action}</div>
+</div>`;
     }
 
     // Генерація HTML-картки окремого статистичного показника
