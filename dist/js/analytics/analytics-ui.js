@@ -53,6 +53,126 @@ window.App.pages = window.App.pages || {};
         }
     };
 
+    const SLIDER_DEFS = [
+        {
+            key: 'weatherPct',
+            title: 'Погодний фактор ГДОП (тепло / газ)',
+            min: -15,
+            max: 20,
+            hint: pct => `Коеф. опалювального навантаження: ×${(1 + pct / 100).toFixed(2)}`
+        },
+        {
+            key: 'heatTariffPct',
+            title: 'Тариф на теплову енергію',
+            min: -15,
+            max: 25,
+            hint: pct => `Ставка: ${fmt(4378 * (1 + pct / 100), 0)} грн/Гкал (база 4 378)`
+        },
+        {
+            key: 'elecTariffPct',
+            title: 'Тариф на електроенергію',
+            min: -10,
+            max: 30,
+            hint: pct => `Ставка: ${fmt(14.77 * (1 + pct / 100), 2)} грн/кВт·год (база 14,77)`
+        },
+        {
+            key: 'gasTariffPct',
+            title: 'Ціна природного газу',
+            min: -15,
+            max: 30,
+            hint: pct => `Ставка: ${fmt(22.97 * (1 + pct / 100), 2)} грн/м³ (база 22,97)`
+        },
+        {
+            key: 'waterTariffPct',
+            title: 'Тариф на воду та водовідведення',
+            min: -10,
+            max: 25,
+            hint: pct => `Холодна вода: ${fmt(83.71 * (1 + pct / 100), 2)} грн/м³`
+        },
+        {
+            key: 'economyPct',
+            title: 'Заходи СЕнМ та СЕС (фіз. обсяг)',
+            min: -15,
+            max: 10,
+            hint: pct => `Коеф. обсягу споживання: ×${(1 + pct / 100).toFixed(2)}`
+        }
+    ];
+
+    function ensureF05Styles() {
+        if (document.getElementById('f05-range-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'f05-range-styles';
+        style.textContent = `
+            input.f05-range[type="range"] {
+                -webkit-appearance: none;
+                appearance: none;
+                display: block;
+                width: 100%;
+                height: 24px;
+                min-height: 24px !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                cursor: pointer;
+            }
+            input.f05-range[type="range"]:focus {
+                outline: none;
+            }
+            input.f05-range[type="range"]::-webkit-slider-runnable-track {
+                width: 100%;
+                height: 8px;
+                border-radius: 999px;
+                background: linear-gradient(
+                    90deg,
+                    var(--green) 0%,
+                    var(--green) var(--fill-pct, 50%),
+                    #dce4df var(--fill-pct, 50%),
+                    #dce4df 100%
+                );
+            }
+            input.f05-range[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: #ffffff;
+                border: 3px solid var(--green);
+                box-shadow: 0 1px 4px rgba(16, 42, 28, 0.28);
+                margin-top: -6px;
+                transition: transform 0.12s ease, box-shadow 0.12s ease;
+            }
+            input.f05-range[type="range"]:hover::-webkit-slider-thumb,
+            input.f05-range[type="range"]:focus::-webkit-slider-thumb {
+                transform: scale(1.12);
+                box-shadow: 0 2px 8px rgba(22, 101, 52, 0.36);
+            }
+            input.f05-range[type="range"]::-moz-range-track {
+                width: 100%;
+                height: 8px;
+                border-radius: 999px;
+                background: #dce4df;
+            }
+            input.f05-range[type="range"]::-moz-range-progress {
+                height: 8px;
+                border-radius: 999px;
+                background: var(--green);
+            }
+            input.f05-range[type="range"]::-moz-range-thumb {
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: #ffffff;
+                border: 3px solid var(--green);
+                box-shadow: 0 1px 4px rgba(16, 42, 28, 0.28);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     function esc(s) {
         return String(s ?? '')
             .replace(/&/g, '&amp;')
@@ -70,6 +190,17 @@ window.App.pages = window.App.pages || {};
     function fmtMln(uah) {
         if (typeof uah !== 'number' || !Number.isFinite(uah)) return '—';
         return fmt(uah / 1e6, 2) + ' млн грн';
+    }
+
+    function calcFillPct(val, min, max) {
+        if (max <= min) return 0;
+        return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+    }
+
+    function getDeltaBadgeStyle(val) {
+        if (val < 0) return 'background:#dcfce7;color:#166534;';
+        if (val > 0) return 'background:#fef3c7;color:#92400e;';
+        return 'background:#eef2ef;color:var(--muted);';
     }
 
     function showToast(msg) {
@@ -173,36 +304,66 @@ window.App.pages = window.App.pages || {};
         }).join('');
     }
 
-    function renderF05DynamicHtml(core, budget) {
-        const span = Math.max(0.01, budget.corridor.highMln - budget.corridor.lowMln);
-        const markerPct = Math.max(0, Math.min(100, ((budget.corridor.activeMln - budget.corridor.lowMln) / span) * 100));
-        const baseMarkerPct = Math.max(0, Math.min(100, ((budget.corridor.baseMln - budget.corridor.lowMln) / span) * 100));
+    function renderF05CorridorHtml(budget) {
+        const low = budget.corridor.lowMln;
+        const base = budget.corridor.baseMln;
+        const high = budget.corridor.highMln;
+        const act = budget.corridor.activeMln;
+
+        const scaleMin = Math.min(low, act);
+        const scaleMax = Math.max(high, act);
+        const span = Math.max(0.01, scaleMax - scaleMin);
+
+        const markerPct = Math.max(0, Math.min(100, ((act - scaleMin) / span) * 100));
+        const baseMarkerPct = Math.max(0, Math.min(100, ((base - scaleMin) / span) * 100));
+
+        const diffMln = act - base;
+        const diffPct = base > 0 ? (diffMln / base) * 100 : 0;
+        const diffSign = diffMln > 0.005 ? '+' : '';
+        const diffText = Math.abs(diffMln) < 0.01
+            ? 'опорний рівень'
+            : `${diffSign}${fmt(diffMln, 2)} млн (${diffSign}${fmt(diffPct, 1)}%)`;
 
         return `
-            <div style="padding:18px;background:var(--paper);border:1px solid var(--line);border-radius:14px;margin-bottom:18px;">
-                <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;">
-                    <div style="font-size:1rem;font-weight:700;color:var(--ink);">
-                        Коридор бюджету 2027: від <span style="color:#15803d;">${fmt(budget.corridor.lowMln, 2)} млн грн</span> до <span style="color:#b91c1c;">${fmt(budget.corridor.highMln, 2)} млн грн</span>, базовий прогноз — <span style="color:var(--green);">${fmt(budget.corridor.baseMln, 2)} млн грн</span>
+            <div style="padding:18px 20px;background:linear-gradient(180deg,#f8fbf9 0%,var(--paper) 100%);border:1px solid var(--line);border-radius:14px;">
+                <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+                    <div>
+                        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:3px;">Інтервальний коридор видатків 2027</div>
+                        <div style="font-size:1.05rem;font-weight:700;color:var(--ink);">
+                            від <span style="color:#15803d;">${fmt(low, 2)} млн грн</span> до <span style="color:#b91c1c;">${fmt(high, 2)} млн грн</span>
+                            <span style="font-weight:400;color:var(--muted);">· базовий прогноз</span> <span style="color:var(--ink);">${fmt(base, 2)} млн грн</span>
+                        </div>
                     </div>
-                    <div style="font-size:.92rem;font-weight:800;color:#fff;background:var(--green);padding:5px 12px;border-radius:999px;">
-                        Поточний сценарій: ${fmt(budget.corridor.activeMln, 2)} млн грн
+
+                    <div style="display:flex;align-items:center;gap:10px;background:var(--green);color:#fff;padding:8px 16px;border-radius:12px;box-shadow:0 2px 8px rgba(20,83,45,.18);">
+                        <div>
+                            <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.85;">Обраний сценарій</div>
+                            <div style="font-size:1.18rem;font-weight:800;line-height:1.2;">${fmt(act, 2)} млн грн <span style="font-size:.82rem;font-weight:600;opacity:.92;">(${diffText})</span></div>
+                        </div>
                     </div>
                 </div>
 
-                <div style="position:relative;height:18px;border-radius:999px;background:linear-gradient(90deg,#22c55e 0%,#eab308 50%,#ef4444 100%);margin:14px 0 8px;">
-                    <div title="Базова межа: ${fmt(budget.corridor.baseMln, 2)} млн грн" style="position:absolute;top:-4px;left:${baseMarkerPct}%;transform:translateX(-50%);width:4px;height:26px;background:var(--ink);border-radius:2px;"></div>
-                    <div title="Обраний сценарій: ${fmt(budget.corridor.activeMln, 2)} млн грн" style="position:absolute;top:-6px;left:${markerPct}%;transform:translateX(-50%);width:30px;height:30px;border-radius:50%;background:#fff;border:4px solid var(--green);box-shadow:0 2px 8px rgba(0,0,0,.22);"></div>
+                <div style="position:relative;padding:6px 0;">
+                    <div style="position:relative;height:14px;border-radius:999px;background:linear-gradient(90deg,#22c55e 0%,#eab308 48%,#ef4444 100%);box-shadow:inset 0 1px 2px rgba(0,0,0,.12);">
+                        <div title="Базова межа: ${fmt(base, 2)} млн грн" style="position:absolute;top:-5px;left:${baseMarkerPct}%;transform:translateX(-50%);width:3px;height:24px;background:var(--ink);border-radius:2px;"></div>
+                        <div title="Поточний сценарій: ${fmt(act, 2)} млн грн" style="position:absolute;top:50%;left:${markerPct}%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#fff;border:4px solid var(--green);box-shadow:0 2px 8px rgba(0,0,0,.25);"></div>
+                    </div>
                 </div>
-                <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);">
-                    <span>Нижня межа: <strong>${fmt(budget.corridor.lowMln, 2)} млн</strong> (тепла зима + СЕС/СЕнМ)</span>
-                    <span>Базова: <strong>${fmt(budget.corridor.baseMln, 2)} млн</strong></span>
-                    <span>Верхня: <strong>${fmt(budget.corridor.highMln, 2)} млн</strong> (холодна зима + ринок газу)</span>
+
+                <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:.82rem;color:var(--muted);margin-top:6px;">
+                    <span>Нижня межа: <strong style="color:#15803d;">${fmt(low, 2)} млн</strong> (тепла зима + СЕС/СЕнМ)</span>
+                    <span>Базова межа: <strong style="color:var(--ink);">${fmt(base, 2)} млн</strong></span>
+                    <span>Верхня межа: <strong style="color:#b91c1c;">${fmt(high, 2)} млн</strong> (холодна зима + ринок газу)</span>
                 </div>
             </div>
+        `;
+    }
 
+    function renderF05TablesHtml(core, budget) {
+        return `
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;">
-                <div>
-                    <h3 style="margin:0 0 8px;font-size:1rem;color:var(--ink);">Розбивка бюджету 2027 за видами ресурсів (КЕКВ)</h3>
+                <div style="padding:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;">
+                    <h3 style="margin:0 0 10px;font-size:1rem;color:var(--ink);">Розбивка бюджету 2027 за видами ресурсів (КЕКВ)</h3>
                     <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
                         <thead>
                             <tr style="border-bottom:2px solid var(--line);text-align:left;color:var(--muted);">
@@ -220,7 +381,7 @@ window.App.pages = window.App.pages || {};
                                     <tr style="border-bottom:1px solid var(--line);">
                                         <td style="padding:8px 6px;"><strong>${esc(label)}</strong> <span style="color:var(--muted);font-size:.78rem;">(${kekv})</span></td>
                                         <td style="padding:8px 6px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${fmtMln(uah)}</td>
-                                        <td style="padding:8px 6px;text-align:right;color:var(--muted);">${fmt(share, 1)}%</td>
+                                        <td style="padding:8px 6px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;">${fmt(share, 1)}%</td>
                                     </tr>
                                 `;
                             }).join('')}
@@ -233,7 +394,7 @@ window.App.pages = window.App.pages || {};
                                     <td></td>
                                 </tr>
                             ` : ''}
-                            <tr style="background:var(--paper);font-weight:800;color:var(--ink);">
+                            <tr style="font-weight:800;color:var(--ink);border-top:2px solid var(--line);">
                                 <td style="padding:9px 6px;">Разом по громаді (2027 р.)</td>
                                 <td style="padding:9px 6px;text-align:right;">${fmtMln(budget.active.totalUah)}</td>
                                 <td style="padding:9px 6px;text-align:right;">100%</td>
@@ -242,27 +403,29 @@ window.App.pages = window.App.pages || {};
                     </table>
                 </div>
 
-                <div>
-                    <h3 style="margin:0 0 8px;font-size:1rem;color:var(--ink);">Розбивка бюджету 2027 за категоріями закладів</h3>
-                    <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
-                        <thead>
-                            <tr style="border-bottom:2px solid var(--line);text-align:left;color:var(--muted);">
-                                <th style="padding:7px 6px;">Категорія закладів</th>
-                                <th style="padding:7px 6px;text-align:right;">Будівель</th>
-                                <th style="padding:7px 6px;text-align:right;">Прогноз 2027</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${budget.active.categories.map(c => `
-                                <tr style="border-bottom:1px solid var(--line);">
-                                    <td style="padding:8px 6px;font-weight:600;">${esc(c.category)}</td>
-                                    <td style="padding:8px 6px;text-align:right;color:var(--muted);">${c.count}</td>
-                                    <td style="padding:8px 6px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${fmtMln(c.totalUah)}</td>
+                <div style="padding:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;justify-content:space-between;">
+                    <div>
+                        <h3 style="margin:0 0 10px;font-size:1rem;color:var(--ink);">Розбивка бюджету 2027 за категоріями закладів</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--line);text-align:left;color:var(--muted);">
+                                    <th style="padding:7px 6px;">Категорія закладів</th>
+                                    <th style="padding:7px 6px;text-align:right;">Будівель</th>
+                                    <th style="padding:7px 6px;text-align:right;">Прогноз 2027</th>
                                 </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                    <div style="margin-top:10px;padding:10px 12px;background:var(--paper);border-radius:10px;font-size:.8rem;color:var(--muted);">
+                            </thead>
+                            <tbody>
+                                ${budget.active.categories.map(c => `
+                                    <tr style="border-bottom:1px solid var(--line);">
+                                        <td style="padding:8px 6px;font-weight:600;">${esc(c.category)}</td>
+                                        <td style="padding:8px 6px;text-align:right;color:var(--muted);">${c.count}</td>
+                                        <td style="padding:8px 6px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${fmtMln(c.totalUah)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:12px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;font-size:.8rem;color:var(--muted);">
                         Верифікація ДКСУ (spending.gov.ua / OpenBudget): бюджет Полтавської МТГ <strong>${esc(budget.dksuMeta.budgetCode)}</strong>, прив’язано <strong>${budget.dksuMeta.linkedSubjectsCount}</strong> активних балансоутримувачів за ЄДРПОУ (із ${budget.dksuMeta.totalSubjectsInDirectory} у довіднику D2-05, КЕКВ 2271–2274).
                     </div>
                 </div>
@@ -271,6 +434,8 @@ window.App.pages = window.App.pages || {};
     }
 
     function renderAnalytics($main) {
+        ensureF05Styles();
+
         const core = A.analyticsCore;
         const state = A.importCore?.getState ? A.importCore.getState() : { buildings: [] };
         const buildings = state.buildings || [];
@@ -289,7 +454,6 @@ window.App.pages = window.App.pages || {};
         const hddData = computeHddTableData(state, core);
         const hdd = hddData.hdd;
 
-        // Автоматичне дозавантаження температур Open-Meteo, якщо завантажено новіший звіт
         if (A.WEATHER_POLTAVA?.syncThroughDate && A.WEATHER_POLTAVA?.getLatestCachedDate) {
             const latestCached = A.WEATHER_POLTAVA.getLatestCachedDate();
             if (hdd.asOf2026 > latestCached && uiState.syncedWeatherThrough !== hdd.asOf2026) {
@@ -312,6 +476,27 @@ window.App.pages = window.App.pages || {};
         const active26Totals = uiState.hddNormalized ? hddData.totals26Norm : hddData.totals26Raw;
         const active26Cost = uiState.hddNormalized ? hddData.cost26NormUah : hddData.cost26RawUah;
         const filteredDefects = getFilteredDefects(anomalies);
+
+        const scenarioCards = [
+            {
+                id: 'optimistic',
+                title: 'Нижня межа · Оптимістичний',
+                sumMln: currentBudget.scenarios.optimistic.totalMln,
+                desc: 'Тепла зима (−8% ГДОП), СЕС/СЕнМ (−8%), фіксація тарифів кінця 2026 р.'
+            },
+            {
+                id: 'baseline',
+                title: 'Базова межа · Реалістичний',
+                sumMln: currentBudget.scenarios.baseline.totalMln,
+                desc: 'Кліматична норма Полтави, індексація тепла й газу +10% з II кв. 2027 р.'
+            },
+            {
+                id: 'stress',
+                title: 'Верхня межа · Стрес-сценарій',
+                sumMln: currentBudget.scenarios.stress.totalMln,
+                desc: 'Холодна зима (+12% ГДОП), зростання тарифів +22%, ринковий газ 26 грн/м³.'
+            }
+        ];
 
         const html = `
             <div style="display:flex;flex-direction:column;gap:22px;padding-bottom:32px;">
@@ -518,8 +703,8 @@ window.App.pages = window.App.pages || {};
                 <!-- =========================================================
                      Ф-05. ПРОГНОЗ БЮДЖЕТУ 2027 (НИЖНЯ — БАЗОВА — ВЕРХНЯ МЕЖА)
                      ========================================================= -->
-                <section class="panel" style="padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);">
-                    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px;">
+                <section class="panel" style="padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;gap:18px;">
+                    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:14px;">
                         <div>
                             <span style="display:inline-block;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#1e40af;background:#dbeafe;padding:3px 9px;border-radius:999px;margin-bottom:6px;">Модуль Ф-05 · Бюджетний симулятор 2027</span>
                             <h2 style="margin:0 0 4px;font-size:1.3rem;color:var(--ink);">Інтервальний прогноз бюджету 2027 (КЕКВ 2271–2274)</h2>
@@ -530,44 +715,69 @@ window.App.pages = window.App.pages || {};
                         </button>
                     </div>
 
-                    <div id="f05-presets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
-                        ${[
-                            ['optimistic', 'Нижня межа (Оптимістичний)'],
-                            ['baseline', 'Базова межа (Реалістичний)'],
-                            ['stress', 'Верхня межа (Стрес-сценарій)']
-                        ].map(([id, title]) => `
-                            <button type="button" data-f05-preset="${id}" style="border:1px solid var(--line);border-radius:10px;padding:8px 14px;font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;background:${uiState.preset === id ? 'var(--green)' : 'var(--paper)'};color:${uiState.preset === id ? '#fff' : 'var(--text)'};">
-                                ${title}
-                            </button>
-                        `).join('')}
+                    <!-- 1. Шкала коридору бюджету 2027 (одразу бачимо результат при русі повзунків) -->
+                    <div id="f05-corridor-box">
+                        ${renderF05CorridorHtml(currentBudget)}
                     </div>
 
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:14px;background:var(--paper);border:1px solid var(--line);border-radius:12px;margin-bottom:18px;">
-                        ${[
-                            ['weatherPct', 'Погодний фактор ГДОП (тепло/газ)', -15, 20],
-                            ['heatTariffPct', 'Зміна тарифу на тепло (від бази 2027)', -15, 25],
-                            ['elecTariffPct', 'Зміна тарифу на електроенергію', -10, 30],
-                            ['gasTariffPct', 'Зміна ціни природного газу', -15, 30],
-                            ['waterTariffPct', 'Зміна тарифу на воду та стоки', -10, 25],
-                            ['economyPct', 'Заходи СЕнМ / СЕС (фіз. обсяг)', -15, 10]
-                        ].map(([key, label, min, max]) => `
-                            <label style="display:flex;flex-direction:column;gap:4px;font-size:.83rem;color:var(--text);">
-                                <span style="display:flex;justify-content:space-between;">
-                                    <span>${label}</span>
-                                    <strong data-f05-val="${key}" style="color:var(--green);">${uiState.sliders[key] > 0 ? '+' : ''}${uiState.sliders[key]}%</strong>
-                                </span>
-                                <input type="range" data-f05-slider="${key}" min="${min}" max="${max}" step="1" value="${uiState.sliders[key]}" style="accent-color:var(--green);cursor:pointer;">
-                            </label>
-                        `).join('')}
-
-                        <label style="grid-column:1 / -1;display:flex;align-items:center;gap:8px;padding-top:6px;border-top:1px solid var(--line);font-size:.88rem;font-weight:600;color:var(--ink);cursor:pointer;">
-                            <input type="checkbox" id="f05-fix-anomalies" ${uiState.sliders.fixAnomaliesF04 ? 'checked' : ''} style="accent-color:var(--green);width:17px;height:17px;">
-                            Врахувати економію від ліквідації аномалій Ф-04 (−${fmtMln(anomalies.summary.totalRealSavingsUah)})
-                        </label>
+                    <!-- 2. Три сценарії у вигляді інтерактивних карток -->
+                    <div id="f05-presets" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+                        ${scenarioCards.map(sc => {
+                            const active = uiState.preset === sc.id;
+                            return `
+                                <button type="button" data-f05-preset="${sc.id}" style="text-align:left;padding:14px 16px;border-radius:12px;border:2px solid ${active ? 'var(--green)' : 'var(--line)'};background:${active ? '#f0fdf4' : 'var(--paper)'};cursor:pointer;font:inherit;transition:border-color .15s,background .15s;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+                                        <span style="font-size:.84rem;font-weight:700;color:${active ? 'var(--green)' : 'var(--ink)'};">${esc(sc.title)}</span>
+                                        <span data-f05-preset-badge="${sc.id}" style="font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:999px;background:${active ? 'var(--green)' : '#e5ece8'};color:${active ? '#fff' : 'var(--muted)'};">${active ? 'Активний' : 'Обрати'}</span>
+                                    </div>
+                                    <div style="font-size:1.35rem;font-weight:800;color:var(--ink);margin-bottom:4px;">${fmt(sc.sumMln, 2)} млн грн</div>
+                                    <div style="font-size:.8rem;color:var(--muted);line-height:1.35;">${esc(sc.desc)}</div>
+                                </button>
+                            `;
+                        }).join('')}
                     </div>
 
-                    <div id="f05-dynamic-results">
-                        ${renderF05DynamicHtml(core, currentBudget)}
+                    <!-- 3. Сітка 3×2 рівних карток із повзунками від краю до краю -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;">
+                        ${SLIDER_DEFS.map(def => {
+                            const val = uiState.sliders[def.key];
+                            const fillPct = calcFillPct(val, def.min, def.max);
+                            return `
+                                <div style="padding:14px 16px;background:var(--paper);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                                        <label for="slider-${def.key}" style="font-size:.88rem;font-weight:600;color:var(--ink);line-height:1.3;cursor:pointer;">${esc(def.title)}</label>
+                                        <span data-f05-val="${def.key}" style="flex-shrink:0;font-size:.84rem;font-weight:800;padding:2px 9px;border-radius:999px;font-variant-numeric:tabular-nums;${getDeltaBadgeStyle(val)}">${val > 0 ? '+' : ''}${val}%</span>
+                                    </div>
+
+                                    <div>
+                                        <input id="slider-${def.key}" class="f05-range" type="range" data-f05-slider="${def.key}" min="${def.min}" max="${def.max}" step="1" value="${val}" style="--fill-pct:${fillPct}%;padding:0;border:0;background:transparent;min-height:24px;width:100%;">
+                                        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;">
+                                            <span>${def.min}%</span>
+                                            <span>0%</span>
+                                            <span>+${def.max}%</span>
+                                        </div>
+                                    </div>
+
+                                    <div data-f05-hint="${def.key}" style="font-size:.79rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:7px;">
+                                        ${esc(def.hint(val))}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- 4. Перемикач економії від усунення аномалій Ф-04 -->
+                    <label style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;cursor:pointer;">
+                        <span style="display:flex;align-items:center;gap:10px;font-size:.9rem;font-weight:600;color:#14532d;">
+                            <input type="checkbox" id="f05-fix-anomalies" ${uiState.sliders.fixAnomaliesF04 ? 'checked' : ''} style="accent-color:var(--green);width:18px;height:18px;margin:0;">
+                            Врахувати економію від ліквідації аномалій та виходу на медіану Ф-04 (−${fmtMln(anomalies.summary.totalRealSavingsUah)})
+                        </span>
+                        <span style="font-size:.78rem;font-weight:700;color:#166534;background:#dcfce7;padding:3px 10px;border-radius:999px;">Зменшує потребу по КЕКВ 2271–2274</span>
+                    </label>
+
+                    <!-- 5. Таблиці розбивки за КЕКВ та категоріями закладів -->
+                    <div id="f05-tables-box">
+                        ${renderF05TablesHtml(core, currentBudget)}
                     </div>
                 </section>
             </div>
@@ -582,20 +792,34 @@ window.App.pages = window.App.pages || {};
             );
 
             $main.find('[data-f05-preset]').each(function () {
-                const active = $(this).attr('data-f05-preset') === uiState.preset;
+                const id = $(this).attr('data-f05-preset');
+                const active = id === uiState.preset;
                 $(this).css({
-                    background: active ? 'var(--green)' : 'var(--paper)',
-                    color: active ? '#fff' : 'var(--text)'
+                    borderColor: active ? 'var(--green)' : 'var(--line)',
+                    background: active ? '#f0fdf4' : 'var(--paper)'
                 });
+                $(this).find('[data-f05-preset-badge]')
+                    .text(active ? 'Активний' : 'Обрати')
+                    .css({
+                        background: active ? 'var(--green)' : '#e5ece8',
+                        color: active ? '#fff' : 'var(--muted)'
+                    });
             });
 
-            for (const [k, val] of Object.entries(uiState.sliders)) {
-                if (typeof val === 'number') {
-                    $main.find(`[data-f05-val="${k}"]`).text(`${val > 0 ? '+' : ''}${val}%`);
-                }
+            for (const def of SLIDER_DEFS) {
+                const val = uiState.sliders[def.key];
+                const fillPct = calcFillPct(val, def.min, def.max);
+                const $badge = $main.find(`[data-f05-val="${def.key}"]`);
+                $badge.text(`${val > 0 ? '+' : ''}${val}%`);
+                $badge.attr('style', `flex-shrink:0;font-size:.84rem;font-weight:800;padding:2px 9px;border-radius:999px;font-variant-numeric:tabular-nums;${getDeltaBadgeStyle(val)}`);
+
+                const $input = $main.find(`[data-f05-slider="${def.key}"]`);
+                $input.css('--fill-pct', fillPct + '%');
+                $main.find(`[data-f05-hint="${def.key}"]`).text(def.hint(val));
             }
 
-            $main.find('#f05-dynamic-results').html(renderF05DynamicHtml(core, currentBudget));
+            $main.find('#f05-corridor-box').html(renderF05CorridorHtml(currentBudget));
+            $main.find('#f05-tables-box').html(renderF05TablesHtml(core, currentBudget));
         }
 
         $main.find('[data-f03-mode]').on('click', function () {
