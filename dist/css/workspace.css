@@ -1424,7 +1424,7 @@ select.ui-select-native {
 }
 
 .ui-select-menu input{
-    padding-left: 25px;
+    padding-left: 25px !important;
 }
 
 .ui-select.wide-select .ui-select-menu {
