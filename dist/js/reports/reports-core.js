@@ -53,7 +53,7 @@ window.App = window.App || {};
     }
 
     /**
-     * Формує готові рядки звіту та групує неповні записи по об'єктах (будівлях)
+     * Перевіряє наявність усіх 4 обов'язкових звітів, формує готові рядки та групує пропуски по об'єктах
      */
     function buildDataGovReport() {
         const state = A.importCore.getState();
@@ -63,11 +63,22 @@ window.App = window.App || {};
         const brokenBuildingsMap = new Map();
 
         const years = Object.keys(state.periods || {}).sort();
-        if (!state.buildings.length) {
-            fatalMissing.push('Не завантажено реєстр будівель (файл Buildings_Info_Report.xlsx).');
+        const hasBuildings = state.buildings.length > 0;
+        const hasMeters = Object.keys(state.meterIndex || {}).length > 0;
+        const hasSubjects = Object.keys(state.subjects || {}).length > 0;
+
+        // Обов'язкова наявність усіх 4 базових звітів для Data.gov.ua
+        if (!hasBuildings) {
+            fatalMissing.push('Не завантажено «Реєстр будівель» (Buildings_Info_Report.xlsx).');
         }
         if (!years.length) {
-            fatalMissing.push('Не завантажено річне споживання ресурсів (файл Річне_використання_ресурсів.xlsx).');
+            fatalMissing.push('Не завантажено звіт «Річне використання ресурсів» (Річне_використання_ресурсів.xlsx).');
+        }
+        if (!hasMeters) {
+            fatalMissing.push('Не завантажено звіт «Лічильники» (Лічильники.xlsx) — потрібен для визначення номерів приладів обліку.');
+        }
+        if (!hasSubjects) {
+            fatalMissing.push('Не завантажено «Інформацію щодо впровадження СЕМ у Полтавській ТГ» — потрібна для кодів ЄДРПОУ суб’єктів.');
         }
 
         if (fatalMissing.length) {
@@ -117,7 +128,7 @@ window.App = window.App || {};
                     const missingMeter = !matchedMeter;
                     const missingEdrpou = !hasValidEdrpou;
 
-                    // Якщо в цьому записі є пропуск — фіксуємо його в картці об'єкта
+                    // Якщо у конкретному об'єкті бракує ЄДРПОУ або лічильника — додаємо у список для точкового виправлення
                     if (missingEdrpou || missingMeter) {
                         skippedRowsCount++;
                         if (!brokenBuildingsMap.has(bId)) {
