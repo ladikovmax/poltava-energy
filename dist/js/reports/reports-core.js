@@ -8,6 +8,19 @@ window.App = window.App || {};
         'providerName', 'providerId', 'meterNumber', 'type', 'quantity', 'unitName'
     ];
 
+    const FIELD_LABELS = {
+        uid: 'ID запису',
+        date: 'Дата зняття',
+        organizationName: 'Заклад',
+        organizationId: 'ЄДРПОУ закладу',
+        providerName: 'Постачальник',
+        providerId: 'ЄДРПОУ постачальника',
+        meterNumber: 'Номер лічильника',
+        type: 'Послуга',
+        quantity: 'Показання',
+        unitName: 'Одиниця'
+    };
+
     const RESOURCE_MAP = [
         { idx: 0, type: 'Теплова енергія', unitName: 'гігакалорія', regex: /тепл/i },
         { idx: 1, type: 'Електроенергія', unitName: 'кіловат-година', regex: /електр/i },
@@ -41,7 +54,6 @@ window.App = window.App || {};
 
     /**
      * Аналізує стан імпортованих даних і готує звіт для Data.gov.ua
-     * Повертає: { ready: boolean, rows: Array, missing: Array<string>, warnings: Array<string>, stats: Object }
      */
     function buildDataGovReport() {
         const state = A.importCore.getState();
@@ -54,7 +66,6 @@ window.App = window.App || {};
         const hasMeters = Object.keys(state.meterIndex || {}).length > 0;
         const hasSubjects = Object.keys(state.subjects || {}).length > 0;
 
-        // 1. Базова перевірка завантажених файлів
         if (!hasBuildings) {
             missing.push('Не завантажено реєстр будівель (файл Buildings_Info_Report.xlsx).');
         }
@@ -68,12 +79,10 @@ window.App = window.App || {};
             missing.push('Не завантажено довідник суб’єктів СЕнМ — без нього відсутні коди ЄДРПОУ закладів.');
         }
 
-        // Якщо бракує базових файлів — далі не рахуємо
         if (missing.length) {
             return { ready: false, rows: [], missing, warnings, stats: { totalRows: 0, years } };
         }
 
-        // 2. Індексуємо лічильники по ID будівлі
         const buildingMeters = new Map();
         for (const [mId, bId] of Object.entries(state.meterIndex)) {
             const key = String(bId);
@@ -88,9 +97,7 @@ window.App = window.App || {};
 
         let buildingsWithoutEdrpou = 0;
         let buildingsWithoutMeters = 0;
-        const invalidRecords = [];
 
-        // 3. Формуємо рядки для кожного року та ресурсу
         for (const b of state.buildings) {
             const orgCode = String(state.links?.[b.id] || '').trim();
             const orgName = orgCode ? (state.subjects?.[orgCode] || b.name) : b.name;
@@ -112,17 +119,14 @@ window.App = window.App || {};
                         continue;
                     }
 
-                    if (!hasValidEdrpou) {
-                        invalidRecords.push(`${b.name} (${yr}): не прив’язано ЄДРПОУ суб’єкта СЕнМ`);
-                        continue;
-                    }
+                    if (!hasValidEdrpou) continue;
 
                     rows.push({
                         uid: 'UM-' + fingerprint(`${b.id}|${orgCode}|${matchedMeter.meterNumber}|${yr}|${res.type}`),
                         date: reportDate,
                         organizationName: clean(orgName),
                         organizationId: orgCode,
-                        providerName: clean(orgName), // Якщо постачальник не виділений окремо, підставляється балансоутримувач або дані з реєстру
+                        providerName: clean(orgName),
                         providerId: orgCode,
                         meterNumber: clean(matchedMeter.meterNumber),
                         type: res.type,
@@ -133,7 +137,6 @@ window.App = window.App || {};
             }
         }
 
-        // 4. Формуємо зрозумілі повідомлення про проблеми в даних
         if (!rows.length) {
             missing.push('Не вдалося сформувати жодного валідного запису. Перевірте, чи прив’язані будівлі до суб’єктів СЕнМ (ЄДРПОУ) та чи є у них лічильники.');
         }
@@ -170,6 +173,8 @@ window.App = window.App || {};
     }
 
     A.reportsCore = {
+        CSV_FIELDS,
+        FIELD_LABELS,
         buildDataGovReport,
         downloadCsv
     };
