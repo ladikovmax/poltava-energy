@@ -42,12 +42,18 @@ window.App = window.App || {};
                         Усі обов'язкові поля перевірено (звітні роки: <b>${esc(report.stats.years.join(', '))}</b>). 
                         Ви можете переглянути таблицю перед завантаженням або одразу зберегти файл.
                     </p>
-                    <div class="actions extras">
-                        <button type="button" class="btn secondary" id="btn-preview-datagov" aria-expanded="false">
-                            Попередній перегляд
-                        </button>
-                        <button type="button" class="btn primary" id="btn-download-datagov">
-                            Завантажити resources.csv
+                    <div class="actions extras" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button type="button" class="btn secondary" id="btn-preview-datagov" aria-expanded="false">
+                                Попередній перегляд
+                            </button>
+                            <button type="button" class="btn primary" id="btn-download-datagov">
+                                Завантажити resources.csv
+                            </button>
+                        </div>
+
+                        <button type="button" class="btn secondary" id="btn-send-datagov">
+                            Відправити на Data.gov.ua
                         </button>
                     </div>
 
