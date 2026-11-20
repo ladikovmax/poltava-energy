@@ -81,7 +81,7 @@ window.App = window.App || {};
             <section class="panel section-gap" style="opacity: 0.7;">
                 <div class="panel-head">
                     <div>
-                        <h2>Інші регламентовані звіти</h2>
+                        <h2>Конскруктор звітів</h2>
                         <p>Зведені звіти для СЕнМ та паспорти енергоефективності громади будуть додані у наступних оновленнях.</p>
                     </div>
                     <span class="pill">У розробці</span>
