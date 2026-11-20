@@ -145,21 +145,36 @@ window.App = window.App || {};
         return { state, items, baseYear, gasKwh };
     }
 
-    // Отримання детального паспорта для однієї будівлі
+    // Отримання детального паспорта для однієї будівлі (з урахуванням Ф-03 HDD)
     function getBuildingPassport(buildingId) {
         const { state, items, baseYear, gasKwh } = analyzeAll();
         if (!items.length) return null;
 
-        // Якщо ID не передано — беремо першу будівлю з розрахованим класом або першу за алфавітом
         const sorted = [...items].sort((a, b) => a.b.name.localeCompare(b.b.name, 'uk'));
         const target = sorted.find(x => x.b.id === String(buildingId))
             || sorted.find(x => x.eligible && x.gradeInfo)
             || sorted[0];
 
-        const b = target.b;
+        const rawB = target.b;
         const years = Object.keys(state.periods || {}).sort();
-        const edrpou = state.links?.[b.id] || '';
+        const edrpou = state.links?.[rawB.id] || '';
         const subjectName = edrpou ? (state.subjects?.[edrpou] || '') : '';
+
+        const hddSummary = A.analyticsCore?.getHddSummary ? A.analyticsCore.getHddSummary() : null;
+        const hddActive = Boolean(A.analyticsCore?.isHddMode && A.analyticsCore.isHddMode() && hddSummary && years.includes('2026'));
+
+        // Підготовка копії будівлі з HDD-нормалізованим 2026 роком (без мутації сирого state)
+        let b = rawB;
+        if (hddActive && Array.isArray(rawB.years?.['2026'])) {
+            const normArr = A.analyticsCore.getNormalizedResources(rawB, '2026', { forceHdd: true, hddSummary });
+            const norm26 = rawB.years['2026'].map((orig, idx) =>
+                (finite(orig) && orig >= 0) ? Math.round(normArr[idx] * 100) / 100 : orig
+            );
+            b = Object.assign({}, rawB, {
+                rawYears: rawB.years,
+                years: Object.assign({}, rawB.years, { '2026': norm26 })
+            });
+        }
 
         // Таблиця споживання по роках + виявлення аномалій 2026 року
         const yearlyData = {};
@@ -171,12 +186,16 @@ window.App = window.App || {};
         if (years.includes('2025') && years.includes('2026')) {
             const v25 = b.years?.['2025'] || [];
             const v26 = b.years?.['2026'] || [];
+            const jumpThreshold = hddActive ? 1.25 : 1.15;
+
             RESOURCES.forEach((res, i) => {
                 const a = v25[i], c = v26[i];
                 if (finite(a) && a > 0 && c === 0) {
                     anomalies2026.push(`Обнулення показників у 2026 році: ${res.name} (у 2025 було ${a} ${res.unit}).`);
-                } else if (finite(a) && a > 0 && finite(c) && c > a * 1.15) {
-                    anomalies2026.push(`Аномальний стрибок у неповному 2026 році: ${res.name} вже перевищує повний 2025 рік (${c} проти ${a} ${res.unit}).`);
+                } else if (finite(a) && a > 0 && finite(c) && c > a * jumpThreshold) {
+                    const pct = Math.round(((c - a) / a) * 100);
+                    const modeNote = hddActive ? 'після кліматичної нормалізації (HDD)' : 'у неповному 2026 році';
+                    anomalies2026.push(`Аномальний стрибок (+${pct}%) ${modeNote}: ${res.name} (${c} проти ${a} ${res.unit}).`);
                 }
             });
         }
@@ -208,6 +227,8 @@ window.App = window.App || {};
             subjectName,
             baseYear,
             gasKwh,
+            hddActive,
+            hddSummary,
             eligible: target.eligible,
             excludes: target.excludes,
             intensity: target.intensity,
