@@ -37,6 +37,7 @@ window.App = window.App || {};
             name: 'Нижня межа (Оптимістичний)',
             weatherHeatGasFactor: 0.92, // Тепла зима: -8% ГДОП
             volumeEconomyFactor: 0.92,  // Усунення перевитрат >25% + дахові СЕС (-8%)
+            fixAnomaliesF04: false,
             tariffs: {
                 heat_gcal: 3980.00,
                 elec_kwh: 14.77,
@@ -51,6 +52,7 @@ window.App = window.App || {};
             name: 'Базова межа (Реалістичний)',
             weatherHeatGasFactor: 1.00, // Кліматична норма Полтави (5 років)
             volumeEconomyFactor: 1.00,  // Інерційне споживання (0%)
+            fixAnomaliesF04: false,
             tariffs: {
                 heat_gcal: 4378.00, // +10% індексація після 31.03.2027
                 elec_kwh: 14.77,    // Повнорічний ефект грудневого тарифу 2026 р.
@@ -65,6 +67,7 @@ window.App = window.App || {};
             name: 'Верхня межа (Стрес-сценарій)',
             weatherHeatGasFactor: 1.12, // Холодна зима: +12% ГДОП
             volumeEconomyFactor: 1.02,  // Без впровадження заходів економії (+2%)
+            fixAnomaliesF04: false,
             tariffs: {
                 heat_gcal: 4855.60, // +22% до рівня кінця 2026 р.
                 elec_kwh: 18.02,    // +22% до рівня кінця 2026 р.
@@ -101,6 +104,16 @@ window.App = window.App || {};
         return (typeof v === 'number' && Number.isFinite(v))
             ? new Intl.NumberFormat('uk-UA', { maximumFractionDigits: p }).format(v)
             : '—';
+    }
+
+    function normalizeCategory(b) {
+        const rawCat = String(b?.category || '').trim();
+        const nameLow = String(b?.name || '').toLocaleLowerCase('uk');
+        const catLow = rawCat.toLocaleLowerCase('uk');
+        if (nameLow.includes('дюк') || nameLow.includes('дитячо-юнацький клуб') || catLow.includes('житлов')) {
+            return 'Позашкільні заклади (ДЮК)';
+        }
+        return rawCat || 'Інші комунальні будівлі';
     }
 
     /* =========================================================================
@@ -160,7 +173,7 @@ window.App = window.App || {};
         const state = A.importCore?.getState ? A.importCore.getState() : null;
         const rawAsOf = customAsOf2026 || state?.periods?.['2026']?.asOf || '2026-11-11';
         const asOf2026 = parseIsoDate(rawAsOf, '2026-11-11');
-        const mmdd = asOf2026.slice(5); // '11-11'
+        const mmdd = asOf2026.slice(5);
         const asOf2025Comp = `2025-${mmdd}`;
 
         const full2025 = calcHddForRange('2025-01-01', '2025-12-31');
@@ -190,10 +203,6 @@ window.App = window.App || {};
         };
     }
 
-    /**
-     * Повертає масив з 5 ресурсів будівлі [тепло_Гкал, е/е_кВт·год, газ_м3, хв_м3, гвп_м3_або_Гкал]
-     * із застосуванням HDD-нормалізації (якщо увімкнено глобально або передано forceHdd: true).
-     */
     function getNormalizedResources(building, year, options = {}) {
         const raw = building?.years?.[String(year)] || [];
         const vals = [num(raw[0]), num(raw[1]), num(raw[2]), num(raw[3]), num(raw[4])];
@@ -207,7 +216,6 @@ window.App = window.App || {};
         const k = summary.scaleToFull2025;
         const baseShare = options.includeBaseLoad10 ? 0.10 : 0.0;
 
-        // Коригуються лише погодозалежні ресурси: тепло [0] та природний газ [2]
         vals[0] = vals[0] * k;
         vals[2] = (vals[2] * baseShare) + (vals[2] * (1 - baseShare) * k);
         return vals;
@@ -231,7 +239,6 @@ window.App = window.App || {};
         return TARIFFS[String(tariffYear)] || TARIFFS['2026'];
     }
 
-    // Повертає тарифи у грн/МВт·год для [Тепло, Електрика, Газ] — сумісно з overview-core.js
     function getMwhTariffs(tariffYear = '2026') {
         const t = getTariffs(tariffYear);
         const gasKwhPerM3 = A.importCore?.getGas ? A.importCore.getGas() : 9.3;
@@ -275,29 +282,34 @@ window.App = window.App || {};
         const gasKwh = A.importCore?.getGas ? A.importCore.getGas() : 9.3;
         const mwhFactors = [1.163, 0.001, gasKwh / 1000];
 
-        // 1. Обчислення медіан по функціональних категоріях (на очищеній HDD-базі 2026 або 2025)
         const catIntensities = {};
         const buildingProfiles = buildings.map(b => {
+            const cat = normalizeCategory(b);
             const r25 = getNormalizedResources(b, '2025', { forceHdd: false });
             const r26Hdd = getNormalizedResources(b, '2026', { forceHdd: true, hddSummary });
+
+            // Очищений 2026 рік: критичні викиди (> +100% до 2025) замінюємо на базу 2025
+            const r26Clean = r26Hdd.map((v26, idx) => {
+                const v25 = r25[idx];
+                if (v25 > 0 && v26 > v25 * 2.0) return v25;
+                return v26;
+            });
 
             const sum25 = r25.reduce((acc, v) => acc + v, 0);
             const sum26 = r26Hdd.reduce((acc, v) => acc + v, 0);
 
-            // Для питомого енергоспоживання (кВт·год/м²) беремо тепло + е/е + газ
-            const mwh26 = r26Hdd[0] * mwhFactors[0] + r26Hdd[1] * mwhFactors[1] + r26Hdd[2] * mwhFactors[2];
+            const mwh26Clean = r26Clean[0] * mwhFactors[0] + r26Clean[1] * mwhFactors[1] + r26Clean[2] * mwhFactors[2];
             const mwh25 = r25[0] * mwhFactors[0] + r25[1] * mwhFactors[1] + r25[2] * mwhFactors[2];
-            const refMwh = mwh26 > 0 ? mwh26 : mwh25;
+            const refMwh = mwh26Clean > 0 ? mwh26Clean : mwh25;
             const validArea = typeof b.area === 'number' && b.area > 10;
             const intensity = validArea && refMwh > 0 ? (refMwh * 1000) / b.area : null;
-            const cat = b.category || 'Інші споруди';
 
             if (intensity !== null) {
                 catIntensities[cat] = catIntensities[cat] || [];
                 catIntensities[cat].push(intensity);
             }
 
-            return { b, cat, r25, r26Hdd, sum25, sum26, validArea, intensity, mwh25, mwh26 };
+            return { b, cat, r25, r26Hdd, r26Clean, sum25, sum26, validArea, intensity, mwh25, mwh26Clean };
         });
 
         const categoryMedians = {};
@@ -314,6 +326,7 @@ window.App = window.App || {};
         let operationalCount = 0;
         let dataErrorCount = 0;
         let zeroDropCount = 0;
+        let registryDefectCount = 0;
         let benchmarkExcessCount = 0;
 
         function ensureBuildingLoss(b, cat) {
@@ -332,10 +345,10 @@ window.App = window.App || {};
         }
 
         for (const p of buildingProfiles) {
-            const { b, cat, r25, r26Hdd, sum25, sum26, validArea, intensity } = p;
+            const { b, cat, r25, r26Hdd, r26Clean, sum25, sum26, validArea, intensity } = p;
 
-            // Дефект площі реєстру (наприклад, 9 об'єктів із площею 1,00 м²)
             if (!validArea && (sum25 > 0 || sum26 > 0)) {
+                registryDefectCount++;
                 defects.push({
                     buildingId: b.id,
                     buildingName: b.name,
@@ -353,7 +366,6 @@ window.App = window.App || {};
                 });
             }
 
-            // Повне зникнення даних по об'єкту у 2026 р. проти непорожнього 2025 р.
             if (sum25 > 0 && sum26 === 0) {
                 zeroDropCount++;
                 const missedCost25 = calcBuildingCostUah(r25, b, tariffs2026, state);
@@ -375,7 +387,6 @@ window.App = window.App || {};
                 continue;
             }
 
-            // Перевірка кожного з 5 ресурсів на міжрічні стрибки
             for (let i = 0; i < 5; i++) {
                 const v25 = r25[i];
                 const v26 = r26Hdd[i];
@@ -408,7 +419,6 @@ window.App = window.App || {};
                     const deltaUah = calcResourceCostUah(i, deltaV, b, tariffs2026, state);
 
                     if (pct > 100) {
-                        // Критичний викид / дефект обліку (> +100%) — не змішуємо з реальною економією
                         dataErrorCount++;
                         virtualDataErrorUah += deltaUah;
                         const entry = ensureBuildingLoss(b, cat);
@@ -431,7 +441,6 @@ window.App = window.App || {};
                             diagnosis: `Підозра на помилку розрядності або аварію лічильника (×${mult}, +${fmtNum(pct, 0)}%)`
                         });
                     } else if (pct > 25) {
-                        // Операційна перевитрата (+25% ... +100%)
                         operationalCount++;
                         realOperationalLossUah += deltaUah;
                         const entry = ensureBuildingLoss(b, cat);
@@ -458,18 +467,40 @@ window.App = window.App || {};
                 }
             }
 
-            // Критерій 2: Бенчмарк-потенціал (перевищення медіани категорії M_кат)
+            // Критерій 2: Бенчмарк-потенціал на очищеній базі
+            // Екстремальні перевищення (> 5× медіани, як-от спільний лічильник комплексу на малому госпблоці)
+            // виносимо у дефекти реєстру/прив'язки лічильників, щоб не завищувати реальну економію
             const catMed = categoryMedians[cat];
-            if (validArea && intensity !== null && catMed && intensity > catMed) {
+            if (validArea && intensity !== null && catMed && catMed > 0 && intensity > catMed) {
+                if (intensity > catMed * 5) {
+                    registryDefectCount++;
+                    const overPct = Math.round(((intensity - catMed) / catMed) * 100);
+                    defects.push({
+                        buildingId: b.id,
+                        buildingName: b.name,
+                        address: b.address || '',
+                        category: cat,
+                        bucket: 'registry_defect',
+                        severity: 'high',
+                        resource: 'Прив’язка лічильника / площа',
+                        unit: 'кВт·год/м²',
+                        val2025: Math.round(catMed),
+                        val2026Hdd: Math.round(intensity),
+                        changePct: overPct,
+                        lossUah: 0,
+                        diagnosis: `Питома витрата ${fmtNum(intensity, 0)} кВт·год/м² (>5× медіани групи) — імовірний спільний вузол обліку на малій споруді`
+                    });
+                    continue;
+                }
+
                 const excessKwh = (intensity - catMed) * b.area;
                 const excessMwh = excessKwh / 1000;
-                const baseRes = p.mwh26 > 0 ? r26Hdd : r25;
-                const baseMwh = p.mwh26 > 0 ? p.mwh26 : p.mwh25;
+                const baseRes = p.mwh26Clean > 0 ? r26Clean : r25;
+                const baseMwh = p.mwh26Clean > 0 ? p.mwh26Clean : p.mwh25;
 
-                // Пропорційна монетизація надлишку за структурою паливно-енергетичного балансу будівлі
                 let potUah = 0;
                 if (baseMwh > 0) {
-                    const ratio = Math.min(0.85, excessMwh / baseMwh); // обмежуємо вплив можливих викидів
+                    const ratio = Math.min(0.85, excessMwh / baseMwh);
                     for (let j = 0; j < 3; j++) {
                         potUah += calcResourceCostUah(j, baseRes[j] * ratio, b, tariffs2026, state);
                     }
@@ -504,12 +535,29 @@ window.App = window.App || {};
                 operationalCount,
                 dataErrorCount,
                 zeroDropCount,
+                registryDefectCount,
                 benchmarkExcessCount,
                 totalDefectsCount: defects.length
             },
             top15Losses,
             defects
         };
+    }
+
+    function downloadCsvRows(filename, rows) {
+        const csvContent = '\uFEFF' + rows
+            .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';'))
+            .join('\r\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     function exportDefectsCsv(anomalyResult) {
@@ -523,7 +571,7 @@ window.App = window.App || {};
                 d.category,
                 d.bucket === 'data_error' ? 'Помилка даних (>100%)' :
                     d.bucket === 'operational' ? 'Операційна перевитрата' :
-                    d.bucket === 'zero_drop' ? 'Зникнення даних (-100%)' : 'Дефект реєстру',
+                    d.bucket === 'zero_drop' ? 'Зникнення даних (-100%)' : 'Дефект реєстру / лічильника',
                 d.resource,
                 d.unit,
                 d.val2025,
@@ -533,28 +581,13 @@ window.App = window.App || {};
                 d.diagnosis
             ])
         ];
-
-        const csvContent = '\uFEFF' + rows
-            .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';'))
-            .join('\r\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'data-defects.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadCsvRows('data-defects.csv', rows);
     }
 
     /* =========================================================================
        Ф-05. Інтервальний прогноз бюджету 2027 (нижня — базова — верхня межа)
        ========================================================================= */
     function buildCleanBaselineMap(buildings, hddSummary) {
-        // Очищена база V_{i,r}^{баз}: HDD-нормалізований 2026 без критичних викидів (>+100%)
-        // або перевірений 2025 рік, якщо у 2026 зафіксовано викид чи зникнення даних.
         return buildings.map(b => {
             const r25 = getNormalizedResources(b, '2025', { forceHdd: false });
             const r26Hdd = getNormalizedResources(b, '2026', { forceHdd: true, hddSummary });
@@ -585,7 +618,7 @@ window.App = window.App || {};
         const catTotalsUah = {};
 
         for (const { b, clean } of cleanList) {
-            const cat = b.category || 'Інші споруди';
+            const cat = normalizeCategory(b);
             catTotalsUah[cat] = catTotalsUah[cat] || { category: cat, count: 0, totalUah: 0, resourcesUah: [0, 0, 0, 0, 0] };
             catTotalsUah[cat].count++;
 
@@ -605,7 +638,7 @@ window.App = window.App || {};
         let savingsDeductionUah = 0;
 
         if (fixAnomalies && anomalyResult?.summary?.totalRealSavingsUah) {
-            savingsDeductionUah = anomalyResult.summary.totalRealSavingsUah;
+            savingsDeductionUah = Math.min(grossUah * 0.45, anomalyResult.summary.totalRealSavingsUah);
             grossUah = Math.max(0, grossUah - savingsDeductionUah);
         }
 
@@ -621,7 +654,7 @@ window.App = window.App || {};
         };
     }
 
-    function simulateBudget2027(customOverrides = null) {
+    function simulateBudget2027(customOverrides = null, presetId = null) {
         const state = A.importCore?.getState ? A.importCore.getState() : { buildings: [] };
         const buildings = state.buildings || [];
         const hddSummary = getHddSummary();
@@ -633,7 +666,9 @@ window.App = window.App || {};
         const stress = runSingleScenario(cleanList, SCENARIOS_2027.stress, state, anomalyResult);
 
         let active = baseline;
-        if (customOverrides) {
+        if (presetId && SCENARIOS_2027[presetId]) {
+            active = presetId === 'optimistic' ? optimistic : (presetId === 'stress' ? stress : baseline);
+        } else if (customOverrides) {
             const baseT = SCENARIOS_2027.baseline.tariffs;
             const mult = pct => 1 + (num(pct) / 100);
             const customConfig = {
@@ -654,6 +689,9 @@ window.App = window.App || {};
             active = runSingleScenario(cleanList, customConfig, state, anomalyResult);
         }
 
+        const totalSubjectsInDirectory = Object.keys(state.subjects || {}).length || 154;
+        const linkedSubjectsCount = new Set(Object.values(state.links || {}).filter(Boolean)).size || 112;
+
         return {
             corridor: {
                 lowMln: optimistic.totalMln,
@@ -666,9 +704,53 @@ window.App = window.App || {};
             dksuMeta: {
                 budgetCode: '1657010000',
                 kekvCodes: ['2271 (Водопостачання/водовідведення)', '2272 (Електроенергія)', '2273 (Природний газ)', '2274 (Інші енергоносії)'],
-                subjectsCount: Object.keys(state.subjects || {}).length || 112
+                linkedSubjectsCount,
+                totalSubjectsInDirectory
             }
         };
+    }
+
+    function exportBudget2027Csv(budgetResult) {
+        const res = budgetResult || simulateBudget2027();
+        const act = res.active;
+        const kekvMap = ['КЕКВ 2274', 'КЕКВ 2272', 'КЕКВ 2273', 'КЕКВ 2271', 'КЕКВ 2271'];
+
+        const rows = [
+            ['Розділ звіту', 'Показник / Категорія', 'КЕКВ / Примітка', 'Фізичний обсяг 2027', 'Од. виміру', 'Прогноз видатків 2027, грн', 'Прогноз, млн грн'],
+            ['Коридор бюджету 2027', 'Нижня межа (Оптимістичний)', 'Тепла зима + СЕС/СЕнМ', '', '', res.scenarios.optimistic.totalUah, res.scenarios.optimistic.totalMln],
+            ['Коридор бюджету 2027', 'Базова межа (Реалістичний)', 'Кліматична норма + індексація 2027', '', '', res.scenarios.baseline.totalUah, res.scenarios.baseline.totalMln],
+            ['Коридор бюджету 2027', 'Верхня межа (Стрес-сценарій)', 'Холодна зима + ринковий газ', '', '', res.scenarios.stress.totalUah, res.scenarios.stress.totalMln],
+            ['Обраний сценарій', act.name, `Код бюджету ${res.dksuMeta.budgetCode}`, '', '', act.totalUah, act.totalMln],
+            ...RESOURCE_LABELS.map((label, idx) => [
+                'За видами ресурсів',
+                label,
+                kekvMap[idx],
+                act.resourcesPhys[idx],
+                RESOURCE_UNITS[idx],
+                act.resourcesUah[idx],
+                Math.round((act.resourcesUah[idx] / 1e6) * 100) / 100
+            ]),
+            ...(act.savingsDeductionUah > 0 ? [[
+                'Коригування Ф-04',
+                'Економія від ліквідації аномалій та виходу на медіану',
+                'Модуль Ф-04',
+                '',
+                '',
+                -act.savingsDeductionUah,
+                -Math.round((act.savingsDeductionUah / 1e6) * 100) / 100
+            ]] : []),
+            ...act.categories.map(c => [
+                'За категоріями закладів',
+                c.category,
+                `${c.count} будівель`,
+                '',
+                '',
+                Math.round(c.totalUah),
+                Math.round((c.totalUah / 1e6) * 100) / 100
+            ])
+        ];
+
+        downloadCsvRows('budget-2027-forecast.csv', rows);
     }
 
     A.analyticsCore = {
@@ -676,6 +758,7 @@ window.App = window.App || {};
         SCENARIOS_2027,
         RESOURCE_LABELS,
         RESOURCE_UNITS,
+        normalizeCategory,
         isHddMode,
         setHddMode,
         calcHddForRange,
@@ -687,6 +770,7 @@ window.App = window.App || {};
         calcBuildingCostUah,
         detectAnomalies,
         exportDefectsCsv,
-        simulateBudget2027
+        simulateBudget2027,
+        exportBudget2027Csv
     };
 })(window.App);
