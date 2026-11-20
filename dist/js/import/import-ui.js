@@ -28,23 +28,32 @@ window.App = window.App || {};
                 <div class="page-head">
                     <div>
                         <h1>Імпорт даних з Excel</h1>
-                        <p class="subtitle">Файли uMuni та СЕнМ обробляються локально у вашому браузері.</p>
+                        <p class="subtitle">Файли uMuni та СЕМ обробляються локально у вашому браузері.</p>
                     </div>
                 </div>
 
                 <div class="columns import-columns">
-                    <!-- Ліва колонка: інструкція -->
+                    <!-- Ліва колонка: інструкція про підтримувані звіти -->
                     <section class="panel import-guide">
-                        <h2>1. Які файли потрібні</h2>
-                        <h3>Обов'язково для старту:</h3>
+                        <h2>1. Які звіти приймає система (.xlsx)</h2>
+                        <p class="muted">Ви можете завантажити всі файли разом або додавати їх поступово (першим обов'язково має бути реєстр будівель):</p>
                         <ul>
-                            <li><b>Buildings_Info_Report.xlsx</b><span>Реєстр будівель із uMuni.</span></li>
-                            <li><b>Річне_використання_ресурсів.xlsx</b><span>Показники споживання за звітний рік.</span></li>
-                        </ul>
-                        <h3>Додатково (для повної аналітики та звітів):</h3>
-                        <ul>
-                            <li><b>Лічильники.xlsx</b><span>Прив'язка приладів обліку до будівель.</span></li>
-                            <li><b>Довідник суб'єктів СЕнМ.xlsx</b><span>Коди ЄДРПОУ організацій.</span></li>
+                            <li>
+                                <b>Реєстр будівель</b>
+                                <span>Перелік комунальних об'єктів, їхні адреси, опалювана площа та об'єм.</span>
+                            </li>
+                            <li>
+                                <b>Річне використання (за різні роки)</b>
+                                <span>Показники споживання ресурсів за звітний рік.</span>
+                            </li>
+                            <li>
+                                <b>Лічильники</b>
+                                <span>Прилади обліку, їхні номери, ресурси та прив'язка до будівель.</span>
+                            </li>
+                            <li>
+                                <b>Інформація щодо впровадження СЕМ у Полтавській ТГ</b>
+                                <span>Довідник суб'єктів СЕнМ та їхні коди ЄДРПОУ для зведення й звітності.</span>
+                            </li>
                         </ul>
                     </section>
 
@@ -80,12 +89,51 @@ window.App = window.App || {};
                             <dl class="facts">
                                 <div><dt>Будівель</dt><dd>${builds.length}</dd></div>
                                 <div><dt>Лічильників</dt><dd>${Object.keys(state.meterIndex || {}).length}</dd></div>
+                                <div><dt>Суб'єктів СЕМ</dt><dd>${subjectIds.length}</dd></div>
                                 <div><dt>Звітні роки</dt><dd>${esc(years.join(', ') || '—')}</dd></div>
                             </dl>
                             <button type="button" class="btn secondary extras" id="imp-clear">Очистити всі дані</button>
                         </section>
                     </div>
                 </div>
+
+                <!-- Блок ручного зіставлення будівель (показується лише якщо є нерозпізнані рядки) -->
+                ${(state.pending || []).length ? `
+                    <section class="panel section-gap">
+                        <h2>Зіставлення нерозпізнаних будівель (${state.pending.length})</h2>
+                        <p class="muted">Ці рядки зі звіту споживання не вдалося автоматично знайти в реєстрі.</p>
+                        <div class="form-grid">
+                            <label class="field">Рядок зі звіту
+                                <select id="imp-pending-row">
+                                    ${state.pending.map((p, i) => `<option value="${i}">${esc(`${p.year} · ${p.name} (${p.address})`)}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="field">Відповідна будівля з реєстру
+                                <select id="imp-pending-build">
+                                    <option value="">— Оберіть будівлю —</option>
+                                    ${buildingOptions}
+                                </select>
+                            </label>
+                            <button type="button" class="btn primary" id="imp-resolve">Підтвердити збіг</button>
+                        </div>
+                    </section>
+                ` : ''}
+
+                <!-- Блок прив'язки суб'єктів СЕМ (показується, коли завантажено довідник СЕМ) -->
+                ${subjectIds.length && builds.length ? `
+                    <section class="panel section-gap">
+                        <h2>Прив'язка будівлі до суб'єкта СЕМ (ЄДРПОУ)</h2>
+                        <div class="form-grid">
+                            <label class="field">Будівля
+                                <select id="imp-link-build">${buildingOptions}</select>
+                            </label>
+                            <label class="field">Суб'єкт СЕМ
+                                <select id="imp-link-subj"></select>
+                            </label>
+                            <button type="button" class="btn primary" id="imp-save-link">Зберегти зв'язок</button>
+                        </div>
+                    </section>
+                ` : ''}
 
                 <!-- Налаштування коефіцієнта газу -->
                 <section class="panel section-gap">
@@ -175,7 +223,7 @@ window.App = window.App || {};
                 $('#imp-save-link').on('click', () => {
                     state.links[$b.val()] = $s.val();
                     Core.saveState(state);
-                    toast('Зв’язок із суб’єктом СЕнМ збережено');
+                    toast('Зв’язок із суб’єктом СЕМ збережено');
                 });
             }
 
