@@ -103,6 +103,21 @@ window.App.pages = window.App.pages || {};
         const style = document.createElement('style');
         style.id = 'f05-range-styles';
         style.textContent = `
+            .f05-sliders-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 12px;
+            }
+            @media (max-width: 960px) {
+                .f05-sliders-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+            @media (max-width: 620px) {
+                .f05-sliders-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
             input.f05-range[type="range"] {
                 -webkit-appearance: none;
                 appearance: none;
@@ -594,7 +609,7 @@ window.App.pages = window.App.pages || {};
                             <p style="margin:0;font-size:.92rem;color:var(--muted);">Автоматичне розділення реального потенціалу економії громади та помилок обліку / реєстру UMUNI.</p>
                         </div>
                         <button type="button" id="btn-export-defects" style="border:1px solid var(--green);background:var(--green);color:#fff;border-radius:10px;padding:9px 16px;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer;">
-                            Експортувати data-defects.csv (${anomalies.summary.totalDefectsCount})
+                            Експортувати CSV
                         </button>
                     </div>
 
@@ -711,11 +726,11 @@ window.App.pages = window.App.pages || {};
                             <p style="margin:0;font-size:.92rem;color:var(--muted);">Розрахунок на очищеній базі споживання громади без сенсорних викидів UMUNI. Бюджет Полтавської МТГ (${esc(currentBudget.dksuMeta.budgetCode)}).</p>
                         </div>
                         <button type="button" id="btn-export-budget" style="border:1px solid var(--green);background:var(--green);color:#fff;border-radius:10px;padding:9px 16px;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer;">
-                            Експортувати прогноз 2027 (.csv)
+                            Експортувати CSV
                         </button>
                     </div>
 
-                    <!-- 1. Шкала коридору бюджету 2027 (одразу бачимо результат при русі повзунків) -->
+                    <!-- 1. Шкала коридору бюджету 2027 -->
                     <div id="f05-corridor-box">
                         ${renderF05CorridorHtml(currentBudget)}
                     </div>
@@ -737,11 +752,13 @@ window.App.pages = window.App.pages || {};
                         }).join('')}
                     </div>
 
-                    <!-- 3. Сітка 3×2 рівних карток із повзунками від краю до краю -->
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;">
+                    <!-- 3. Симетрична сітка 3×2 рівних карток із точним положенням 0% -->
+                    <div class="f05-sliders-grid">
                         ${SLIDER_DEFS.map(def => {
                             const val = uiState.sliders[def.key];
                             const fillPct = calcFillPct(val, def.min, def.max);
+                            const zeroPct = calcFillPct(0, def.min, def.max);
+                            const zeroOffsetPx = ((0.5 - zeroPct / 100) * 20).toFixed(1);
                             return `
                                 <div style="padding:14px 16px;background:var(--paper);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;">
                                     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -751,10 +768,10 @@ window.App.pages = window.App.pages || {};
 
                                     <div>
                                         <input id="slider-${def.key}" class="f05-range" type="range" data-f05-slider="${def.key}" min="${def.min}" max="${def.max}" step="1" value="${val}" style="--fill-pct:${fillPct}%;padding:0;border:0;background:transparent;min-height:24px;width:100%;">
-                                        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;">
-                                            <span>${def.min}%</span>
-                                            <span>0%</span>
-                                            <span>+${def.max}%</span>
+                                        <div style="position:relative;height:16px;font-size:.75rem;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums;">
+                                            <span style="position:absolute;left:0;">${def.min}%</span>
+                                            <span style="position:absolute;left:calc(${zeroPct}% + ${zeroOffsetPx}px);transform:translateX(-50%);font-weight:600;">0%</span>
+                                            <span style="position:absolute;right:0;">+${def.max}%</span>
                                         </div>
                                     </div>
 
