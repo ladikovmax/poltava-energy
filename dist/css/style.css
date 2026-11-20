@@ -467,7 +467,7 @@ input::placeholder {
 }
 
 .panel + .panel:not(.dashboard > .panel):not(.aside > .panel) {
-    margin-top: 18px;
+    /* margin-top: 18px; */
 }
 
 .panel-head {

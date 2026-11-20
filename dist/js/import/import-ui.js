@@ -6,9 +6,34 @@ window.App = window.App || {};
     const Core = A.importCore;
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+    const ICONS = {
+        success: `<svg class="imp-msg-ico" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="9" fill="#eef5f0" stroke="#1c5744" stroke-width="1.5"/>
+            <path d="M6.2 10.3L8.7 12.8L13.8 7.5" stroke="#1c5744" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`,
+        error: `<svg class="imp-msg-ico" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="9" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+            <path d="M7.2 7.2L12.8 12.8M12.8 7.2L7.2 12.8" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>`
+    };
+
+    function renderResultMessage(type, text) {
+        const cls = type === 'error' ? 'imp-msg is-error' : 'imp-msg is-success';
+        return `<p class="${cls}">${ICONS[type]}<span>${esc(text)}</span></p>`;
+    }
+
     function toast(msg) {
         const $t = $('#toast').text(msg);
         setTimeout(() => $t.text(''), 4500);
+    }
+
+    function formatFilesCount(count) {
+        if (!count) return 'Файли не вибрано';
+        const mod10 = count % 10;
+        const mod100 = count % 100;
+        if (mod10 === 1 && mod100 !== 11) return `Обрано ${count} файл`;
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `Обрано ${count} файли`;
+        return `Обрано ${count} файлів`;
     }
 
     // Головна функція відмальовки сторінки імпорту
@@ -23,7 +48,9 @@ window.App = window.App || {};
             const metersCount = Object.keys(state.meterIndex || {}).length;
             const subjectsCount = Object.keys(state.subjects || {}).length;
             const years = Object.keys(state.periods || {}).sort();
+
             const hasAnyData = builds.length > 0 || metersCount > 0 || subjectsCount > 0 || years.length > 0;
+            const allReportsLoaded = builds.length > 0 && years.length > 0 && metersCount > 0 && subjectsCount > 0;
 
             $main.html(`
                 <div class="page-head">
@@ -62,9 +89,16 @@ window.App = window.App || {};
                     <section class="panel import-upload">
                         <h2>2. Завантаження файлів (.xlsx)</h2>
                         <div class="file-zone">
-                            <label class="field">Оберіть один або кілька файлів Excel
-                                <input type="file" accept=".xlsx" multiple id="imp-files">
-                            </label>
+                            <div class="field">
+                                <span>Оберіть один або кілька файлів Excel</span>
+                                <div class="imp-picker-row" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+                                    <label class="btn secondary" for="imp-files" style="cursor: pointer; margin: 0;">
+                                        Вибрати файли
+                                    </label>
+                                    <span id="imp-files-status" class="cell-meta">Файли не вибрано</span>
+                                    <input type="file" accept=".xlsx" multiple id="imp-files" style="display: none;">
+                                </div>
+                            </div>
                             <button type="button" class="btn primary" id="imp-run">Опрацювати файли</button>
                         </div>
 
@@ -72,11 +106,11 @@ window.App = window.App || {};
 
                         ${messages.length ? `
                             <div id="imp-messages" class="import-result">
-                                ${messages.map(m => `<p>✅ ${esc(m)}</p>`).join('')}
+                                ${messages.map(m => renderResultMessage('success', m)).join('')}
                             </div>
                         ` : '<div id="imp-messages" class="import-result" hidden></div>'}
 
-                        ${years.length ? `
+                        ${allReportsLoaded ? `
                             <div class="import-next-actions">
                                 <a class="btn secondary" href="#overview">Перейти до огляду</a>
                                 <a class="btn primary" href="#reports">Сформувати звіт data.gov.ua</a>
@@ -138,10 +172,15 @@ window.App = window.App || {};
             bindEvents();
         }
 
-        // Відмальовка списку файлів у черзі
+        // Відмальовка списку файлів у черзі та оновлення індикатора біля кнопки вибору
         function renderQueue() {
+            const count = queuedFiles.size;
+            $('#imp-files-status')
+                .text(formatFilesCount(count))
+                .css('font-weight', count ? '600' : '400');
+
             const $q = $('#imp-queue');
-            if (!queuedFiles.size) {
+            if (!count) {
                 $q.prop('hidden', true).empty();
                 return;
             }
@@ -153,7 +192,7 @@ window.App = window.App || {};
             ).join('');
             $q.prop('hidden', false).html(`
                 <div class="imp-queue-head">
-                    <span>Обрано файлів: <b>${queuedFiles.size}</b></span>
+                    <span>Обрано файлів: <b>${count}</b></span>
                     <button type="button" class="imp-queue-clear" id="imp-clear-queue">Очистити список</button>
                 </div>
                 <ul class="imp-queue-list">${items}</ul>
@@ -193,7 +232,7 @@ window.App = window.App || {};
                 } catch (err) {
                     $('#imp-messages')
                         .prop('hidden', false)
-                        .html(`<p class="is-error">❌ ${esc(err.message)}</p>`);
+                        .html(renderResultMessage('error', err.message));
                     $btn.prop('disabled', false).text('Опрацювати файли');
                 }
             });

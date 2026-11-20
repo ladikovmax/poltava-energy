@@ -1904,3 +1904,37 @@ select.ui-select-native {
     font-size: 0.84rem;
     color: #64748b;
 }
+
+/* Повідомлення про результат імпорту з SVG-іконками */
+.import-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.imp-msg {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 9px 12px;
+    border-radius: 9px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.imp-msg.is-success {
+    background: #f4f8f5;
+    border: 1px solid #cfe0d5;
+    color: #123e32;
+}
+
+.imp-msg.is-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
+.imp-msg-ico {
+    flex-shrink: 0;
+}
