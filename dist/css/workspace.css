@@ -213,22 +213,6 @@
     margin-top: 2px;
 }
 
-.grade {
-    display: inline-grid;
-    place-items: center;
-    min-width: 29px;
-    padding: 2px 8px;
-    border-radius: 6px;
-    background: #e8efdc;
-    font-weight: 700;
-    color: #34512a;
-}
-
-.grade.f, .grade.g {
-    background: #f6e9cc;
-    color: #724f1d;
-}
-
 .file-zone {
     display: grid;
     gap: 12px;
@@ -244,8 +228,9 @@
 
 .columns {
     display: grid;
-    grid-template-columns: 1.3fr 1fr;
-    gap: 18px;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 20px;
+    align-items: start;
 }
 
 .actions .field {
@@ -394,11 +379,13 @@
     }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
     .columns {
         grid-template-columns: 1fr;
     }
+}
 
+@media (max-width: 760px) {
     .stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -439,46 +426,380 @@
     }
 }
 
-.import-guide h3 {
-    margin: 1.35rem 0 .35rem;
+/* =========================================================
+   Сторінка «Імпорт даних з Excel» (#import)
+   ========================================================= */
+.import-columns {
+    grid-template-columns: 1.2fr 1fr;
+    align-items: stretch;
 }
 
-.import-guide > p, .import-tools h2 + p {
-    margin: .65rem 0 1rem;
+.import-guide,
+.import-upload {
+    display: flex;
+    flex-direction: column;
+}
+
+.import-guide > p {
+    margin: .55rem 0 1.05rem;
+    color: var(--muted);
+    line-height: 1.45;
 }
 
 .import-guide ul {
     list-style: none;
     padding: 0;
     margin: 0;
+    counter-reset: import-step;
+    display: grid;
+    gap: 6px;
 }
 
 .import-guide li {
-    padding: .6rem 0;
-    border-bottom: 1px solid var(--line);
+    position: relative;
+    counter-increment: import-step;
+    padding: .82rem .65rem .82rem 2.75rem;
+    border-radius: 11px;
+    background: #f9fbfa;
+    border: 1px solid #e6eee9;
+    transition: background-color .15s ease, border-color .15s ease;
 }
 
-.import-guide li b, .import-guide li span {
+.import-guide li:hover {
+    background: #f2f8f4;
+    border-color: #cfe0d6;
+}
+
+.import-guide li::before {
+    content: counter(import-step);
+    position: absolute;
+    left: .55rem;
+    top: .85rem;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 999px;
+    background: #e3f1e9;
+    border: 1px solid #bfd7c9;
+    color: #144736;
+    font-size: .8rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.import-guide li b,
+.import-guide li span {
     display: block;
 }
 
 .import-guide li b {
-    overflow-wrap: anywhere;
+    color: var(--ink);
+    font-size: .94rem;
+    line-height: 1.32;
 }
 
 .import-guide li span {
-    font-size: .9rem;
+    margin-top: .22rem;
+    font-size: .84rem;
+    line-height: 1.4;
     color: var(--muted);
 }
 
-.import-tools {
+.import-upload > h2 {
+    margin-bottom: .95rem;
+}
+
+.import-upload .file-zone {
+    gap: 14px;
+    padding: 18px;
+    border: 1.5px dashed #8db39c;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #f7fbf8 0%, #eef5f1 100%);
+    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.import-upload .file-zone:hover,
+.import-upload .file-zone:focus-within {
+    border-color: var(--green);
+    background: linear-gradient(180deg, #f2f9f5 0%, #e6f1eb 100%);
+    box-shadow: 0 4px 16px rgba(28, 87, 68, 0.08);
+}
+
+.import-upload .file-zone > label {
+    font-size: .88rem;
+    font-weight: 600;
+    color: #1d3c30;
+}
+
+.import-upload .file-zone input[type="file"] {
+    width: 100%;
+    padding: 8px 10px;
+    background: #ffffff;
+    border: 1px solid #cfe0d6;
+    border-radius: 10px;
+    font: inherit;
+    font-size: .85rem;
+    color: #465c52;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(16, 42, 34, 0.04);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.import-upload .file-zone input[type="file"]:hover {
+    border-color: #9bc0ab;
+}
+
+.import-upload .file-zone input[type="file"]:focus-visible {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(28, 87, 68, 0.14);
+}
+
+.import-upload .file-zone input[type="file"]::file-selector-button,
+.import-upload .file-zone input[type="file"]::-webkit-file-upload-button {
+    margin-right: 11px;
+    padding: 7px 13px;
+    border: 1px solid #bfd6c8;
+    border-radius: 8px;
+    background: #eaf3ee;
+    color: #143f31;
+    font: inherit;
+    font-size: .83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.import-upload .file-zone input[type="file"]::file-selector-button:hover,
+.import-upload .file-zone input[type="file"]::-webkit-file-upload-button:hover {
+    background: #dcebe2;
+    border-color: #1c5744;
+    color: #0e2f24;
+}
+
+.import-upload .file-zone .btn.primary {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 10px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(18, 63, 49, 0.16);
+}
+
+/* Черга обраних файлів */
+.imp-queue {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: #f8fbf9;
+    border: 1px solid #dce8e1;
+}
+
+.imp-queue-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: .84rem;
+    color: #364e43;
+}
+
+.imp-queue-clear {
+    padding: 0;
+    font-size: .8rem;
+    font-weight: 600;
+    color: #7c2d2d;
+}
+
+.imp-queue-clear:hover {
+    text-decoration: underline;
+}
+
+.imp-queue-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.imp-queue-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid #e1ece5;
+    font-size: .83rem;
+    color: #1c352b;
+}
+
+.imp-file-name {
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.import-tools .facts {
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+.imp-file-del {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    font-size: .75rem;
+    color: #64748b;
+    transition: background-color .14s ease, color .14s ease;
 }
 
+.imp-file-del:hover {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Результат імпорту */
+.import-upload .import-result {
+    margin-top: 14px;
+    padding: 11px 13px;
+    border-radius: 11px;
+    background: #f3f9f5;
+    border: 1px solid #d2e4d9;
+    display: grid;
+    gap: 5px;
+    font-size: .85rem;
+    color: #183a2d;
+}
+
+.import-upload .import-result p.is-error {
+    color: #991b1b;
+}
+
+/* Нижні кнопки переходу */
+.import-next-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+.import-next-actions .btn {
+    flex: 1 1 180px;
+    min-height: 41px;
+    border-radius: 10px;
+}
+
+/* =========================================================
+   Блок «Завантажено у браузер» (на всю ширину під колонками)
+   ========================================================= */
+.import-storage-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.import-storage-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.import-storage-head p {
+    margin-top: 5px;
+    font-size: .9rem;
+}
+
+.imp-clear-btn {
+    flex-shrink: 0;
+    min-height: 38px;
+    padding: 7px 14px;
+    border-radius: 10px;
+    font-size: .85rem;
+    color: #882626;
+    border-color: #e4d2d2;
+    background: #fffafa;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.imp-clear-btn:hover:not(:disabled) {
+    background: #fef2f2;
+    border-color: #f3b8b8;
+    color: #991b1b;
+}
+
+.import-storage-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.storage-card {
+    padding: 15px 17px;
+    border-radius: 13px;
+    background: linear-gradient(180deg, #f8fbf9 0%, #f1f6f3 100%);
+    border: 1px solid #dbe7e0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.storage-card dt {
+    font-size: .8rem;
+    font-weight: 600;
+    color: #54695e;
+}
+
+.storage-card dd {
+    margin: 2px 0;
+    font-size: 1.55rem;
+    line-height: 1.15;
+    font-weight: 750;
+    letter-spacing: -.03em;
+    color: #123e32;
+    font-variant-numeric: tabular-nums;
+}
+
+.storage-hint {
+    font-size: .78rem;
+    color: #6b7f74;
+}
+
+@media (max-width: 900px) {
+    .import-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .import-storage-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .import-storage-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .imp-clear-btn {
+        width: 100%;
+    }
+
+    .import-storage-facts {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =========================================================
+   Звіти (Публікація)
+   ========================================================= */
 .pub-wrap .report-tabs button[aria-pressed=true] {
     color: #fff;
     background: var(--green-deep);
@@ -626,17 +947,27 @@
     font-size: 0.82rem;
 }
 
-/* Контрастніші класи F та G */
+/* Класи ефективності A–G */
+.grade {
+    display: inline-grid;
+    place-items: center;
+    min-width: 29px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #e8efdc;
+    font-weight: 700;
+    color: #34512a;
+}
 .grade.f { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
 .grade.g { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
 
 /* Підсумковий рядок у зведенні 2025 */
 .row-total td { font-weight: 600; background: #f4f8f5; }
 details.panel > summary { display: flex; justify-content: space-between; align-items: center; }
+
 /* =========================================================
    Огляд: права картка (смуга громади + збалансований SVG-круг)
    ========================================================= */
-
 .structure-panel {
     display: flex;
     flex-direction: column;
@@ -645,12 +976,10 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     min-width: 0;
 }
 
-/* Прибираємо зайвий нижній відступ заголовка картки */
 .structure-panel .panel-head {
     margin-bottom: 0;
 }
 
-/* Верхня горизонтальна смуга по всій громаді */
 .comm-mix {
     display: flex;
     flex-direction: column;
@@ -717,7 +1046,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     font-weight: 600;
 }
 
-/* Нижній анімований блок обраної категорії */
 .cat-drilldown {
     flex: 1;
     background: linear-gradient(180deg, #f6faf7 0%, #eff5f1 100%);
@@ -766,7 +1094,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     color: #2f6b53;
 }
 
-/* Фіксована висота на 2 рядки — прибирає стрибання верстки при кліках */
 .drill-title {
     margin: 0;
     font-size: 0.94rem;
@@ -787,7 +1114,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     min-width: 0;
 }
 
-/* Анімоване SVG-кільце (132×132) */
 .svg-donut-wrap {
     position: relative;
     width: 132px;
@@ -856,7 +1182,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     margin-top: 4px;
 }
 
-/* Просторі дворядкові плашки ресурсів поруч із кругом */
 .drill-list {
     flex: 1;
     min-width: 0;
@@ -940,7 +1265,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     }
 }
 
-/* Миттєва підказка при наведенні на літеру класу (A–G) */
 .grade-tip {
     position: relative;
     cursor: help;
@@ -994,7 +1318,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     transform: translateY(0);
 }
 
-/* Клікабельний блок «Уся громада» у правій картці */
 .comm-mix-btn {
     width: 100%;
     text-align: left;
@@ -1022,7 +1345,8 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
 .mix-head-right {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .mix-action-tag {
@@ -1040,21 +1364,12 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     color: #ffffff;
 }
 
-/* Однорядкове вирівнювання шапки блоку «Уся громада» */
 .comm-mix-head .mix-eyebrow {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.mix-head-right {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-/* Позначка неповного року на бейджі класу (A–G) */
 .grade.is-partial {
     position: relative;
 }
@@ -1087,7 +1402,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     border: 1px solid #f59e0b;
 }
 
-/* Панель швидких фільтрів сортування */
 .sort-toolbar {
     display: flex;
     align-items: center;
@@ -1153,7 +1467,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     opacity: 1;
 }
 
-/* Колонка «Площа / Обсяг» у таблиці */
 .metric-stack {
     display: flex;
     flex-direction: column;
@@ -1172,7 +1485,6 @@ details.panel > summary { display: flex; justify-content: space-between; align-i
     color: #1c5744;
 }
 
-/* Оновлена нижня пагінація таблиці */
 .pager-bar {
     display: flex;
     align-items: center;
@@ -1406,7 +1718,6 @@ select.ui-select-native {
     color: #1c5744;
 }
 
-/* Випадаюча панель */
 .ui-select-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -1423,7 +1734,7 @@ select.ui-select-native {
     animation: uiSelectDrop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.ui-select-menu input{
+.ui-select-menu input {
     padding-left: 25px !important;
 }
 
@@ -1452,7 +1763,6 @@ select.ui-select-native {
     }
 }
 
-/* Пошук усередині довгих списків */
 .ui-select-search {
     position: relative;
     display: flex;
@@ -1492,7 +1802,6 @@ select.ui-select-native {
     box-shadow: 0 0 0 2px rgba(28, 87, 68, 0.12);
 }
 
-/* Список опцій */
 .ui-select-options {
     max-height: 290px;
     overflow-y: auto;
@@ -1560,7 +1869,6 @@ select.ui-select-native {
     flex-shrink: 0;
 }
 
-/* Бейджі статусів/класів у списку будівель */
 .ui-opt-tag {
     display: inline-block;
     padding: 2px 7px;

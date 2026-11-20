@@ -19,10 +19,11 @@ window.App = window.App || {};
         const queuedFiles = new Map();
 
         function draw() {
-            const builds = [...state.buildings].sort((a, b) => a.name.localeCompare(b.name, 'uk'));
-            const subjectIds = Object.keys(state.subjects || {});
+            const builds = state.buildings || [];
+            const metersCount = Object.keys(state.meterIndex || {}).length;
+            const subjectsCount = Object.keys(state.subjects || {}).length;
             const years = Object.keys(state.periods || {}).sort();
-            const buildingOptions = builds.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+            const hasAnyData = builds.length > 0 || metersCount > 0 || subjectsCount > 0 || years.length > 0;
 
             $main.html(`
                 <div class="page-head">
@@ -57,83 +58,69 @@ window.App = window.App || {};
                         </ul>
                     </section>
 
-                    <!-- Права колонка: завантаження та статус -->
-                    <div class="import-tools">
-                        <section class="panel">
-                            <h2>2. Завантаження файлів (.xlsx)</h2>
-                            <div class="file-zone">
-                                <label class="field">Оберіть один або кілька файлів Excel
-                                    <input type="file" accept=".xlsx" multiple id="imp-files">
-                                </label>
-                                <div class="extras">
-                                    <button type="button" class="btn primary" id="imp-run">Опрацювати файли</button>
-                                </div>
-                            </div>
+                    <!-- Права колонка: завантаження файлів -->
+                    <section class="panel import-upload">
+                        <h2>2. Завантаження файлів (.xlsx)</h2>
+                        <div class="file-zone">
+                            <label class="field">Оберіть один або кілька файлів Excel
+                                <input type="file" accept=".xlsx" multiple id="imp-files">
+                            </label>
+                            <button type="button" class="btn primary" id="imp-run">Опрацювати файли</button>
+                        </div>
 
-                            <div id="imp-queue" class="extras"></div>
+                        <div id="imp-queue" class="imp-queue" hidden></div>
 
-                            <div id="imp-messages" class="import-result extras">
+                        ${messages.length ? `
+                            <div id="imp-messages" class="import-result">
                                 ${messages.map(m => `<p>✅ ${esc(m)}</p>`).join('')}
                             </div>
+                        ` : '<div id="imp-messages" class="import-result" hidden></div>'}
 
-                            ${years.length ? `
-                                <div class="actions extras">
-                                    <a class="btn secondary" href="#overview">Перейти до огляду</a>
-                                    <a class="btn primary" href="#reports">Сформувати звіт data.gov.ua</a>
-                                </div>
-                            ` : ''}
-                        </section>
-
-                        <section class="panel">
-                            <h2>Завантажено у браузер</h2>
-                            <dl class="facts">
-                                <div><dt>Будівель</dt><dd>${builds.length}</dd></div>
-                                <div><dt>Лічильників</dt><dd>${Object.keys(state.meterIndex || {}).length}</dd></div>
-                                <div><dt>Суб'єктів СЕМ</dt><dd>${subjectIds.length}</dd></div>
-                                <div><dt>Звітні роки</dt><dd>${esc(years.join(', ') || '—')}</dd></div>
-                            </dl>
-                            <button type="button" class="btn secondary extras" id="imp-clear">Очистити всі дані</button>
-                        </section>
-                    </div>
+                        ${years.length ? `
+                            <div class="import-next-actions">
+                                <a class="btn secondary" href="#overview">Перейти до огляду</a>
+                                <a class="btn primary" href="#reports">Сформувати звіт data.gov.ua</a>
+                            </div>
+                        ` : ''}
+                    </section>
                 </div>
 
-                <!-- Блок ручного зіставлення будівель (показується лише якщо є нерозпізнані рядки) -->
-                ${(state.pending || []).length ? `
-                    <section class="panel section-gap">
-                        <h2>Зіставлення нерозпізнаних будівель (${state.pending.length})</h2>
-                        <p class="muted">Ці рядки зі звіту споживання не вдалося автоматично знайти в реєстрі.</p>
-                        <div class="form-grid">
-                            <label class="field">Рядок зі звіту
-                                <select id="imp-pending-row">
-                                    ${state.pending.map((p, i) => `<option value="${i}">${esc(`${p.year} · ${p.name} (${p.address})`)}</option>`).join('')}
-                                </select>
-                            </label>
-                            <label class="field">Відповідна будівля з реєстру
-                                <select id="imp-pending-build">
-                                    <option value="">— Оберіть будівлю —</option>
-                                    ${buildingOptions}
-                                </select>
-                            </label>
-                            <button type="button" class="btn primary" id="imp-resolve">Підтвердити збіг</button>
+                <!-- Блок стану локального сховища на всю ширину під двома верхніми картками -->
+                <section class="panel section-gap import-storage">
+                    <div class="import-storage-head">
+                        <div>
+                            <div class="import-storage-title">
+                                <h2>Завантажено у браузер</h2>
+                                <span class="badge ${hasAnyData ? '' : 'warn'}">${hasAnyData ? 'Дані збережено локально' : 'Сховище порожнє'}</span>
+                            </div>
+                            <p class="muted">Зведена статистика поточного зрізу, який використовується для розрахунків та звітів.</p>
                         </div>
-                    </section>
-                ` : ''}
+                        <button type="button" class="btn secondary imp-clear-btn" id="imp-clear" ${hasAnyData ? '' : 'disabled'}>Очистити всі дані</button>
+                    </div>
 
-                <!-- Блок прив'язки суб'єктів СЕМ (показується, коли завантажено довідник СЕМ) -->
-                ${subjectIds.length && builds.length ? `
-                    <section class="panel section-gap">
-                        <h2>Прив'язка будівлі до суб'єкта СЕМ (ЄДРПОУ)</h2>
-                        <div class="form-grid">
-                            <label class="field">Будівля
-                                <select id="imp-link-build">${buildingOptions}</select>
-                            </label>
-                            <label class="field">Суб'єкт СЕМ
-                                <select id="imp-link-subj"></select>
-                            </label>
-                            <button type="button" class="btn primary" id="imp-save-link">Зберегти зв'язок</button>
+                    <dl class="facts import-storage-facts">
+                        <div class="storage-card">
+                            <dt>Будівель у реєстрі</dt>
+                            <dd>${builds.length}</dd>
+                            <span class="storage-hint">Комунальних об'єктів</span>
                         </div>
-                    </section>
-                ` : ''}
+                        <div class="storage-card">
+                            <dt>Лічильників</dt>
+                            <dd>${metersCount}</dd>
+                            <span class="storage-hint">Прив'язаних приладів</span>
+                        </div>
+                        <div class="storage-card">
+                            <dt>Суб'єктів СЕМ</dt>
+                            <dd>${subjectsCount}</dd>
+                            <span class="storage-hint">Установ у довіднику</span>
+                        </div>
+                        <div class="storage-card">
+                            <dt>Звітні роки</dt>
+                            <dd>${esc(years.join(', ') || '—')}</dd>
+                            <span class="storage-hint">${years.length ? `Завантажено періодів: ${years.length}` : 'Немає річних звітів'}</span>
+                        </div>
+                    </dl>
+                </section>
 
                 <!-- Налаштування коефіцієнта газу -->
                 <section class="panel section-gap">
@@ -148,24 +135,33 @@ window.App = window.App || {};
             `);
 
             renderQueue();
-            bindEvents(subjectIds);
+            bindEvents();
         }
 
         // Відмальовка списку файлів у черзі
         function renderQueue() {
             const $q = $('#imp-queue');
             if (!queuedFiles.size) {
-                $q.empty();
+                $q.prop('hidden', true).empty();
                 return;
             }
             const items = Array.from(queuedFiles.keys(), name =>
-                `<li>${esc(name)} <button type="button" data-del-file="${esc(name)}">✕</button></li>`
+                `<li>
+                    <span class="imp-file-name" title="${esc(name)}">${esc(name)}</span>
+                    <button type="button" class="imp-file-del" data-del-file="${esc(name)}" aria-label="Прибрати файл ${esc(name)}">✕</button>
+                </li>`
             ).join('');
-            $q.html(`<p>Обрано файлів: <b>${queuedFiles.size}</b></p><ul>${items}</ul>`);
+            $q.prop('hidden', false).html(`
+                <div class="imp-queue-head">
+                    <span>Обрано файлів: <b>${queuedFiles.size}</b></span>
+                    <button type="button" class="imp-queue-clear" id="imp-clear-queue">Очистити список</button>
+                </div>
+                <ul class="imp-queue-list">${items}</ul>
+            `);
         }
 
         // Прив'язка всіх обробників подій
-        function bindEvents(subjectIds) {
+        function bindEvents() {
             $('#imp-files').on('change', function () {
                 for (const f of this.files) queuedFiles.set(f.name, f);
                 $(this).val('');
@@ -174,6 +170,11 @@ window.App = window.App || {};
 
             $('#imp-queue').on('click', '[data-del-file]', function () {
                 queuedFiles.delete($(this).attr('data-del-file'));
+                renderQueue();
+            });
+
+            $('#imp-queue').on('click', '#imp-clear-queue', function () {
+                queuedFiles.clear();
                 renderQueue();
             });
 
@@ -190,7 +191,9 @@ window.App = window.App || {};
                     toast('Імпорт успішно завершено!');
                     draw();
                 } catch (err) {
-                    $('#imp-messages').html(`<p style="color:#b91c1c">❌ ${esc(err.message)}</p>`);
+                    $('#imp-messages')
+                        .prop('hidden', false)
+                        .html(`<p class="is-error">❌ ${esc(err.message)}</p>`);
                     $btn.prop('disabled', false).text('Опрацювати файли');
                 }
             });
@@ -207,25 +210,6 @@ window.App = window.App || {};
                     toast(err.message);
                 }
             });
-
-            // Прив'язка ЄДРПОУ
-            if (subjectIds.length) {
-                const $b = $('#imp-link-build'), $s = $('#imp-link-subj');
-                const updateSubj = () => {
-                    const cur = state.links?.[$b.val()] || '';
-                    const opts = `<option value="">— Не визначений —</option>` +
-                        subjectIds.map(id => `<option value="${esc(id)}" ${id === cur ? 'selected' : ''}>${esc(state.subjects[id])} (${esc(id)})</option>`).join('');
-                    $s.html(opts);
-                };
-                updateSubj();
-                $b.on('change', updateSubj);
-
-                $('#imp-save-link').on('click', () => {
-                    state.links[$b.val()] = $s.val();
-                    Core.saveState(state);
-                    toast('Зв’язок із суб’єктом СЕМ збережено');
-                });
-            }
 
             // Збереження коефіцієнта газу
             $('#imp-save-gas').on('click', () => {
