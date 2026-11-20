@@ -3,18 +3,25 @@ window.App = window.App || {};
 (function (A) {
     'use strict';
 
-    // Орієнтовні тарифи Полтавської ТГ (з ПДВ) у грн за 1 МВт·год:
-    // Тепло: ~3 980 грн/Гкал (~3 422 грн/МВт·год), е/е: 14,77 грн/кВт·год, газ: 20,88 грн/м³ (~2 245 грн/мВт·год)
-    const TARIFF_UAH_PER_MWH = [3422, 14770, 2245];
+    // Резервні тарифи у грн/МВт·год на випадок, якщо analytics-core.js ще не завантажено
+    const FALLBACK_TARIFF_UAH_PER_MWH = [3980 / 1.163, 14770, 20.88 * (1000 / 9.3)];
     const ENERGY_NAMES = ['Теплова енергія', 'Електроенергія', 'Природний газ'];
     const MIN_DAYS_FOR_GRADE = 30; // Мінімум 1 місяць даних для оцінки ефективності
 
     const finite = v => typeof v === 'number' && Number.isFinite(v);
 
-    // Орієнтовний бюджет у млн грн
+    function getTariffsPerMwh() {
+        if (A.analyticsCore?.getMwhTariffs) {
+            return A.analyticsCore.getMwhTariffs('2026');
+        }
+        return FALLBACK_TARIFF_UAH_PER_MWH;
+    }
+
+    // Орієнтовний бюджет у млн грн у цінах кінця 2026 р. (через єдину тарифну матрицю)
     function estimateCostMln(amounts) {
         if (!Array.isArray(amounts)) return null;
-        const totalUah = amounts.reduce((sum, mwh, i) => sum + (mwh || 0) * (TARIFF_UAH_PER_MWH[i] || 0), 0);
+        const tariffs = getTariffsPerMwh();
+        const totalUah = amounts.reduce((sum, mwh, i) => sum + (mwh || 0) * (tariffs[i] || 0), 0);
         return totalUah > 0 ? totalUah / 1e6 : null;
     }
 
@@ -110,7 +117,7 @@ window.App = window.App || {};
     }
 
     // Підготовка даних для вибраного року (огляд + категорії + рейтинг)
-    function getOverviewData(selectedYear) {
+    function getOverviewData(selectedYear, options = {}) {
         const state = A.importCore.getState();
         const gasKwh = A.importCore.getGas();
         const years = Object.keys(state.periods || {}).sort().reverse();
@@ -124,6 +131,10 @@ window.App = window.App || {};
         const periodMeta = getPeriodMeta(year, period);
         const full = periodMeta.full;
 
+        const hddSummary = A.analyticsCore?.getHddSummary ? A.analyticsCore.getHddSummary() : null;
+        const hddRequested = options.disableHdd ? false : Boolean(A.analyticsCore?.isHddMode && A.analyticsCore.isHddMode());
+        const hddActive = hddRequested && year === '2026' && Boolean(hddSummary);
+
         const gasFactor = (finite(gasKwh) && gasKwh > 0 ? gasKwh : 9.3) / 1000;
         const factors = [1.163, 0.001, gasFactor];
 
@@ -134,7 +145,16 @@ window.App = window.App || {};
         const draftRows = state.buildings.map(b => {
             const baseItem = baseMap.get(b.id);
             const category = baseItem ? baseItem.category : (b.category || 'Інші комунальні будівлі');
-            const raw = b.years?.[year] || [];
+            const rawSrc = b.years?.[year] || [];
+            const normSrc = hddActive
+                ? A.analyticsCore.getNormalizedResources(b, year, { forceHdd: true, hddSummary })
+                : null;
+
+            const raw = [0, 1, 2].map(i => {
+                const orig = rawSrc[i];
+                if (!finite(orig) || orig < 0) return orig;
+                return hddActive ? normSrc[i] : orig;
+            });
 
             let mwh = 0;
             let hasEnergy = false;
@@ -171,9 +191,9 @@ window.App = window.App || {};
             };
         });
 
-        // 2. Розрахунок медіан категорій для неповного року (якщо зібрано >= 1 місяця даних)
+        // 2. Розрахунок медіан категорій для неповного року (якщо не застосовано HDD-приведення до повного року)
         const partialMedians = new Map();
-        if (!full && periodMeta.enoughForGrade) {
+        if (!full && !hddActive && periodMeta.enoughForGrade) {
             const byCat = new Map();
             for (const r of draftRows) {
                 if (!r.eligible || !finite(r.intensity)) continue;
@@ -196,6 +216,11 @@ window.App = window.App || {};
                 grade = r.eligible
                     ? (r.baseItem?.gradeInfo ? r.baseItem.gradeInfo.grade : calcGrade(r.intensity, median))
                     : null;
+            } else if (hddActive) {
+                // Приведений до повного кліматичного року показник порівнюється з еталонною річною медіаною
+                median = r.baseItem ? r.baseItem.median : null;
+                grade = r.eligible ? calcGrade(r.intensity, median) : null;
+                isPartialGrade = false;
             } else if (periodMeta.enoughForGrade) {
                 median = partialMedians.get(r.category) ?? null;
                 if (median === null && r.baseItem?.median) {
@@ -240,6 +265,8 @@ window.App = window.App || {};
             period,
             periodMeta,
             full,
+            hddActive,
+            hddSummary,
             rows,
             activeRows,
             summary: summarize(rows),
@@ -248,12 +275,12 @@ window.App = window.App || {};
         };
     }
 
-    // Зведення базового рівня СЕнМ за 2025 рік у розрізі 112 суб'єктів ЄДРПОУ
+    // Зведення базового рівня СЕнМ за 2025 рік у розрізі суб'єктів ЄДРПОУ
     function getBaseline2025() {
         const state = A.importCore.getState();
         if (!state.periods?.['2025']) return null;
 
-        const overview25 = getOverviewData('2025');
+        const overview25 = getOverviewData('2025', { disableHdd: true });
         const rows = overview25.rows || [];
         const bySubject = new Map();
 
