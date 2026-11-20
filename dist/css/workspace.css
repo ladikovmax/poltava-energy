@@ -1423,6 +1423,10 @@ select.ui-select-native {
     animation: uiSelectDrop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.ui-select-menu input{
+    padding-left: 25px;
+}
+
 .ui-select.wide-select .ui-select-menu {
     width: 100%;
 }
