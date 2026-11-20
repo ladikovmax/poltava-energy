@@ -39,7 +39,6 @@ window.App = window.App || {};
     // Головна функція відмальовки сторінки імпорту
     function renderImportPage($main) {
         let state = Core.getState();
-        let gas = Core.getGas();
         let messages = [];
         const queuedFiles = new Map();
 
@@ -155,17 +154,6 @@ window.App = window.App || {};
                         </div>
                     </dl>
                 </section>
-
-                <!-- Налаштування коефіцієнта газу -->
-                <section class="panel section-gap">
-                    <h2>Коефіцієнт теплоти згоряння газу (кВт·год/м³)</h2>
-                    <div class="fields">
-                        <label class="field">Значення
-                            <input id="imp-gas" type="number" min="0.01" max="25" step="any" value="${gas}">
-                        </label>
-                        <button type="button" class="btn secondary" id="imp-save-gas">Зберегти коефіцієнт</button>
-                    </div>
-                </section>
             `);
 
             renderQueue();
@@ -248,15 +236,6 @@ window.App = window.App || {};
                 } catch (err) {
                     toast(err.message);
                 }
-            });
-
-            // Збереження коефіцієнта газу
-            $('#imp-save-gas').on('click', () => {
-                const val = Number($('#imp-gas').val());
-                if (!Number.isFinite(val) || val <= 0) return toast('Введіть коректне число');
-                gas = val;
-                Core.setGas(val);
-                toast('Коефіцієнт газу оновлено');
             });
 
             // Очищення даних

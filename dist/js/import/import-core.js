@@ -4,7 +4,7 @@ window.App = window.App || {};
     'use strict';
 
     const STORE_KEY = 'poltava-energy-workspace-v2';
-    const GAS_KEY = 'poltava-energy-gas-v2';
+    const GAS_KWH_PER_M3 = 9.7; // Фіксований коефіцієнт теплоти згоряння природного газу (кВт·год/м³)
 
     // Допоміжні утиліти для очищення та порівняння тексту
     const tidy = v => String(v ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
@@ -43,7 +43,7 @@ window.App = window.App || {};
 
     function clearAllData() {
         localStorage.removeItem(STORE_KEY);
-        localStorage.removeItem(GAS_KEY);
+        localStorage.removeItem('poltava-energy-gas-v2');
         localStorage.removeItem('poltava-energy-publication-v2');
     }
 
@@ -333,12 +333,12 @@ window.App = window.App || {};
 
     // Експортуємо публічний API бекенду імпорту
     A.importCore = {
+        GAS_KWH_PER_M3,
         getState: loadState,
         saveState,
         clearAllData,
         processFiles,
         resolvePending,
-        getGas: () => Number(localStorage.getItem(GAS_KEY)) || 9.7,
-        setGas: val => localStorage.setItem(GAS_KEY, String(val))
+        getGas: () => GAS_KWH_PER_M3
     };
 })(window.App);
