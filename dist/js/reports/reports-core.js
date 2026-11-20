@@ -53,38 +53,40 @@ window.App = window.App || {};
     }
 
     /**
-     * Аналізує стан імпортованих даних і готує звіт для Data.gov.ua
+     * Формує готові рядки звіту та групує неповні записи по об'єктах (будівлях)
      */
     function buildDataGovReport() {
         const state = A.importCore.getState();
-        const missing = [];
+        const fatalMissing = [];
         const warnings = [];
         const rows = [];
+        const brokenBuildingsMap = new Map();
 
         const years = Object.keys(state.periods || {}).sort();
-        const hasBuildings = state.buildings.length > 0;
-        const hasMeters = Object.keys(state.meterIndex || {}).length > 0;
-        const hasSubjects = Object.keys(state.subjects || {}).length > 0;
-
-        if (!hasBuildings) {
-            missing.push('Не завантажено реєстр будівель (файл Buildings_Info_Report.xlsx).');
+        if (!state.buildings.length) {
+            fatalMissing.push('Не завантажено реєстр будівель (файл Buildings_Info_Report.xlsx).');
         }
         if (!years.length) {
-            missing.push('Не завантажено річне споживання ресурсів (файл Річне_використання_ресурсів.xlsx).');
-        }
-        if (!hasMeters) {
-            missing.push('Не завантажено реєстр лічильників (файл Лічильники.xlsx) — без них неможливо визначити номери приладів обліку.');
-        }
-        if (!hasSubjects) {
-            missing.push('Не завантажено довідник суб’єктів СЕнМ — без нього відсутні коди ЄДРПОУ закладів.');
+            fatalMissing.push('Не завантажено річне споживання ресурсів (файл Річне_використання_ресурсів.xlsx).');
         }
 
-        if (missing.length) {
-            return { ready: false, rows: [], missing, warnings, stats: { totalRows: 0, years } };
+        if (fatalMissing.length) {
+            return {
+                hasBaseData: false,
+                ready: false,
+                rows: [],
+                fatalMissing,
+                issuesByBuilding: [],
+                skippedRowsCount: 0,
+                warnings: [],
+                subjects: state.subjects || {},
+                stats: { totalRows: 0, years }
+            };
         }
 
+        // Індексуємо лічильники по ID будівлі
         const buildingMeters = new Map();
-        for (const [mId, bId] of Object.entries(state.meterIndex)) {
+        for (const [mId, bId] of Object.entries(state.meterIndex || {})) {
             const key = String(bId);
             if (!buildingMeters.has(key)) buildingMeters.set(key, []);
             const det = state.meterDetails?.[mId] || {};
@@ -95,16 +97,14 @@ window.App = window.App || {};
             });
         }
 
-        let buildingsWithoutEdrpou = 0;
-        let buildingsWithoutMeters = 0;
+        let skippedRowsCount = 0;
 
         for (const b of state.buildings) {
-            const orgCode = String(state.links?.[b.id] || '').trim();
+            const bId = String(b.id);
+            const orgCode = String(state.links?.[bId] || '').trim();
             const orgName = orgCode ? (state.subjects?.[orgCode] || b.name) : b.name;
-            const meters = buildingMeters.get(String(b.id)) || [];
-
+            const meters = buildingMeters.get(bId) || [];
             const hasValidEdrpou = /^\d{8}$/.test(orgCode);
-            if (!hasValidEdrpou) buildingsWithoutEdrpou++;
 
             for (const [yr, values] of Object.entries(b.years || {})) {
                 const reportDate = state.periods[yr]?.asOf || `${yr}-12-31`;
@@ -114,15 +114,33 @@ window.App = window.App || {};
                     if (qty == null || !Number.isFinite(qty) || qty < 0) continue;
 
                     const matchedMeter = meters.find(m => res.regex.test(m.resource));
-                    if (!matchedMeter) {
-                        buildingsWithoutMeters++;
+                    const missingMeter = !matchedMeter;
+                    const missingEdrpou = !hasValidEdrpou;
+
+                    // Якщо в цьому записі є пропуск — фіксуємо його в картці об'єкта
+                    if (missingEdrpou || missingMeter) {
+                        skippedRowsCount++;
+                        if (!brokenBuildingsMap.has(bId)) {
+                            brokenBuildingsMap.set(bId, {
+                                buildingId: bId,
+                                buildingName: b.name,
+                                address: b.address || '',
+                                missingEdrpou,
+                                currentEdrpou: orgCode,
+                                currentOrgName: orgName,
+                                missingResources: new Set(),
+                                years: new Set()
+                            });
+                        }
+                        const entry = brokenBuildingsMap.get(bId);
+                        entry.years.add(yr);
+                        if (missingMeter) entry.missingResources.add(res.type);
                         continue;
                     }
 
-                    if (!hasValidEdrpou) continue;
-
+                    // Валідний запис одразу потрапляє у звіт
                     rows.push({
-                        uid: 'UM-' + fingerprint(`${b.id}|${orgCode}|${matchedMeter.meterNumber}|${yr}|${res.type}`),
+                        uid: 'UM-' + fingerprint(`${bId}|${orgCode}|${matchedMeter.meterNumber}|${yr}|${res.type}`),
                         date: reportDate,
                         organizationName: clean(orgName),
                         organizationId: orgCode,
@@ -137,29 +155,83 @@ window.App = window.App || {};
             }
         }
 
-        if (!rows.length) {
-            missing.push('Не вдалося сформувати жодного валідного запису. Перевірте, чи прив’язані будівлі до суб’єктів СЕнМ (ЄДРПОУ) та чи є у них лічильники.');
-        }
-        if (buildingsWithoutEdrpou > 0) {
-            warnings.push(`У ${buildingsWithoutEdrpou} будівель не вказано код ЄДРПОУ суб’єкта СЕнМ (вони пропущені у звіті; прив’язати можна на сторінці «Імпорт»).`);
-        }
-        if (buildingsWithoutMeters > 0) {
-            warnings.push(`Для ${buildingsWithoutMeters} записів споживання не знайдено відповідного лічильника у файлі Лічильники.xlsx.`);
-        }
+        const issuesByBuilding = [...brokenBuildingsMap.values()]
+            .map(item => ({
+                ...item,
+                missingResources: [...item.missingResources],
+                years: [...item.years].sort()
+            }))
+            .sort((a, b) => a.buildingName.localeCompare(b.buildingName, 'uk'));
+
         if ((state.pending || []).length > 0) {
             warnings.push(`Є ${state.pending.length} незіставлених рядків будівель на сторінці «Імпорт» — вони не увійшли до звіту.`);
         }
 
+        if (!rows.length && !issuesByBuilding.length) {
+            fatalMissing.push('У завантажених звітах немає жодного числового показника споживання ресурсів.');
+        }
+
         return {
-            ready: missing.length === 0 && rows.length > 0,
+            hasBaseData: fatalMissing.length === 0,
+            ready: fatalMissing.length === 0 && rows.length > 0,
             rows,
-            missing,
+            fatalMissing,
+            issuesByBuilding,
+            skippedRowsCount,
             warnings,
+            subjects: state.subjects || {},
             stats: {
                 totalRows: rows.length,
                 years
             }
         };
+    }
+
+    /**
+     * Зберігає виправлені реквізити для конкретного об'єкта (ЄДРПОУ та/або список лічильників)
+     */
+    function saveBuildingFix({ buildingId, edrpou, orgName, meters }) {
+        const state = A.importCore.getState();
+        const bId = String(buildingId);
+
+        if (edrpou !== undefined) {
+            const code = clean(edrpou);
+            if (!/^\d{8}$/.test(code)) {
+                throw Error('Код ЄДРПОУ має містити рівно 8 цифр.');
+            }
+            state.links = state.links || {};
+            state.subjects = state.subjects || {};
+            state.links[bId] = code;
+            if (clean(orgName)) {
+                state.subjects[code] = clean(orgName);
+            } else if (!state.subjects[code]) {
+                const b = state.buildings.find(x => String(x.id) === bId);
+                state.subjects[code] = b ? b.name : `Суб'єкт ${code}`;
+            }
+        }
+
+        if (Array.isArray(meters) && meters.length) {
+            state.meterIndex = state.meterIndex || {};
+            state.meterResources = state.meterResources || {};
+            state.meterDetails = state.meterDetails || {};
+
+            for (const m of meters) {
+                const num = clean(m.meterNumber);
+                if (!num) {
+                    throw Error(`Вкажіть номер лічильника для послуги «${m.resourceType}».`);
+                }
+                const manualMeterId = `manual-${bId}-${fingerprint(m.resourceType)}`;
+                state.meterIndex[manualMeterId] = bId;
+                state.meterResources[manualMeterId] = m.resourceType;
+                state.meterDetails[manualMeterId] = {
+                    number: num,
+                    model: 'Введено вручну',
+                    kind: 'Комерційний'
+                };
+            }
+        }
+
+        A.importCore.saveState(state);
     }
 
     function downloadCsv(filename, rows) {
@@ -176,6 +248,7 @@ window.App = window.App || {};
         CSV_FIELDS,
         FIELD_LABELS,
         buildDataGovReport,
+        saveBuildingFix,
         downloadCsv
     };
 })(window.App);
