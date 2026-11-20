@@ -563,7 +563,7 @@ window.App = window.App || {};
                     <div class="legend chart-foot">${legendHtml}</div>
                 </article>
 
-                <!-- Права картка: клікабельна смуга громади + блок обраної категорії -->
+                <!-- Права картка: клікабельна смуга громади + блок обраної категорії або громади -->
                 <article class="panel structure-panel">
                     <div class="panel-head">
                         <div>
@@ -574,7 +574,7 @@ window.App = window.App || {};
                     </div>
 
                     <!-- 1. Клікабельний блок по всій громаді за обраний рік -->
-                    <button type="button" class="comm-mix comm-mix-btn ${isAllSelected ? 'is-active' : ''}" id="ov-pick-all" title="Показати всі ${activeRows.length} споруд за ${data.year} рік у таблиці">
+                    <button type="button" class="comm-mix comm-mix-btn ${isAllSelected ? 'is-active' : ''}" id="ov-pick-all" title="Показати всі ${activeRows.length} споруд за ${data.year} рік у структурі та таблиці">
                         <div class="comm-mix-head">
                             <span class="mix-eyebrow">Уся громада · ${activeRows.length} буд. (${data.year})</span>
                             <span class="mix-head-right">
@@ -599,7 +599,7 @@ window.App = window.App || {};
                         </div>
                     </button>
 
-                    <!-- 2. Нижній блок з анімованим SVG-кругом для конкретної категорії -->
+                    <!-- 2. Нижній блок з анімованим SVG-кругом для обраної категорії або всієї громади -->
                     <div class="cat-drilldown" id="ov-cat-drilldown">
                         <div class="drill-head">
                             <div class="drill-top-row">
@@ -727,7 +727,20 @@ window.App = window.App || {};
         enhanceAllSelects($main[0]);
 
         function updateCategoryDonut(animateEntrance = true) {
-            const g = groups.find(item => item.name === uiState.donutCat) || groups[0];
+            const isAll = uiState.cat === ALL_CAT;
+            const g = isAll
+                ? {
+                    name: 'Уся громада (усі категорії)',
+                    covered: s.covered,
+                    count: rows.length,
+                    total: s.total,
+                    amounts: s.amounts,
+                    counts: s.counts,
+                    shares: s.shares,
+                    toe: s.toe,
+                    costMln: s.costMln
+                }
+                : (groups.find(item => item.name === uiState.cat) || groups.find(item => item.name === uiState.donutCat) || groups[0]);
             if (!g) return;
 
             const $box = $('#ov-cat-drilldown');
@@ -737,7 +750,9 @@ window.App = window.App || {};
                 $box.addClass('is-animating');
             }
 
-            const shareOfComm = s.total && g.total ? (g.total / s.total) * 100 : 0;
+            const shareOfComm = isAll
+                ? 100
+                : (s.total && g.total ? (g.total / s.total) * 100 : 0);
 
             $('#ov-drill-meta').text(`${g.covered} із ${g.count} будівель зі споживанням`);
             $('#ov-drill-title').text(g.name);
@@ -749,12 +764,16 @@ window.App = window.App || {};
             }
 
             $('#ov-ring-total').text(g.total !== null ? fmt(g.total, 0) : '0');
-            $('#ov-ring-share').text(s.total ? `${fmt(shareOfComm, 1)}% громади` : 'немає даних');
+            $('#ov-ring-share').text(s.total ? `${fmt(shareOfComm, isAll ? 0 : 1)}% громади` : 'немає даних');
 
-            const catMedian = canGrade ? rows.find(r => r.category === g.name && r.median !== null)?.median : null;
+            const catMedian = !isAll && canGrade
+                ? rows.find(r => r.category === g.name && r.median !== null)?.median
+                : null;
             const toeText = g.toe !== null ? `${fmt(g.toe, 1)} т н. е.` : 'немає даних';
-            const medText = catMedian ? ` · медіана ${fmt(catMedian, 1)} кВт·год/м²` : '';
-            $('#ov-drill-toe').text(toeText + medText);
+            const extraText = isAll
+                ? ` · ${groups.length} категорій`
+                : (catMedian ? ` · медіана ${fmt(catMedian, 1)} кВт·год/м²` : '');
+            $('#ov-drill-toe').text(toeText + extraText);
 
             const arcs = calcRingArcs(g.shares);
             arcs.forEach((arc, i) => {
@@ -1020,7 +1039,7 @@ window.App = window.App || {};
 
         function selectCategory(catName) {
             const isAll = catName === ALL_CAT;
-            const prevDonut = uiState.donutCat;
+            const prevCat = uiState.cat;
 
             uiState.cat = catName;
             if (!isAll) {
@@ -1042,7 +1061,7 @@ window.App = window.App || {};
                 $(this).toggleClass('is-active', !isAll && $(this).attr('data-pick-cat') === catName);
             });
 
-            if (!isAll && prevDonut !== catName) {
+            if (prevCat !== catName) {
                 updateCategoryDonut(true);
             }
             drawRank();
@@ -1061,9 +1080,6 @@ window.App = window.App || {};
         });
 
         $('#ov-jump-rank').on('click', () => {
-            if (uiState.cat === ALL_CAT && uiState.donutCat) {
-                selectCategory(uiState.donutCat);
-            }
             document.getElementById('ov-ranking')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
